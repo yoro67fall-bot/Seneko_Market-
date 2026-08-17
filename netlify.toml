@@ -2,6 +2,12 @@
   publish = "public"
 
 [[redirects]]
+  from = "/api-config.json"
+  to = "/api-config.json"
+  status = 200
+  force = false
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

@@ -6,11 +6,6 @@ client_chat.txt
 # Original client dump (the live UI is public/index.html)
 Code Plateforme Seneko.html
 
-# Local API URL (keep public/api-config.example.json)
-public/api-config.json
-**/api-config.json
-!public/api-config.example.json
-
 # Leftover Firebase / nested static copies
 .firebase/
 .firebaserc
