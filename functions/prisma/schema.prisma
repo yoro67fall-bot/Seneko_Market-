@@ -1,0 +1,176 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  passwordHash         String
+  firstname            String    @default("")
+  lastname             String    @default("")
+  phone                String    @default("")
+  role                 String    @default("merchant")
+  onboardingCompleted  Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  shop                 Shop?
+  payments             Payment[]
+  sponsorships         Sponsorship[]
+}
+
+model Shop {
+  id               String     @id @default(cuid())
+  ownerId          String     @unique
+  owner            User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name             String
+  nameNormalized   String     @unique
+  category         String
+  description      String
+  phone            String
+  whatsapp         String
+  email            String?
+  logo             String?
+  icon             String     @default("fa-store")
+  facade           String?
+  idCardPath       String
+  idVerified       Boolean    @default(false)
+  openingFor       String     @default("myself")
+  agentCode        String?
+  approvalStatus   String     @default("pending")
+  approved         Boolean    @default(false)
+  adminVisible     Boolean    @default(true)
+  visible          Boolean    @default(false)
+  rentPaid         Boolean    @default(false)
+  rentPaidUntil    DateTime?
+  lastPayment      DateTime?
+  sponsored        Boolean    @default(false)
+  sponsorEndDate   DateTime?
+  bannerImage      String?
+  deletedAt        DateTime?
+  lastModeratedBy  String?
+  lastModeratedAt  DateTime?
+  identityVerifiedBy String?
+  identityVerifiedAt DateTime?
+  rentMarkedBy     String?
+  rentMarkedAt     DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  products         Product[]
+  payments         Payment[]
+  sponsorships     Sponsorship[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  shopId      String
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  ownerId     String
+  name        String
+  price       Int
+  description String
+  category    String?
+  images      String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Payment {
+  id              String    @id @default(cuid())
+  ownerId         String
+  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  shopId          String
+  shop            Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  purpose         String
+  paymentMethod   String
+  amount          Int
+  currency        String    @default("XOF")
+  status          String    @default("pending")
+  sponsorOption   String?
+  durationDays    Int?
+  bannerImages    String[]
+  provider        String    @default("naboopay")
+  providerOrderId String?   @unique
+  checkoutUrl     String?
+  idempotencyKey  String    @unique
+  requestHash     String
+  appliedAt       DateTime?
+  failReason      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  sponsorship     Sponsorship?
+}
+
+model PaymentEvent {
+  id        String   @id @default(cuid())
+  paymentId String
+  orderId   String
+  status    String
+  createdAt DateTime @default(now())
+}
+
+model Sponsorship {
+  id           String   @id @default(cuid())
+  paymentId    String   @unique
+  payment      Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  shopId       String
+  shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  ownerId      String
+  owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  option       String?
+  durationDays Int
+  price        Int
+  currency     String   @default("XOF")
+  bannerImages String[]
+  status       String   @default("active")
+  startDate    DateTime
+  endDate      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Agent {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String
+  code       String   @unique
+  commission Float
+  active     Boolean  @default(true)
+  updatedBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Banner {
+  id        String    @id @default(cuid())
+  title     String
+  subtitle  String    @default("")
+  image     String?
+  link      String?
+  position  Int       @default(0)
+  active    Boolean   @default(true)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  updatedBy String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model PlatformConfig {
+  id               String   @id @default("config")
+  rentAmount       Int      @default(5000)
+  rentDurationDays Int      @default(30)
+  sponsorPrice7    Int      @default(5000)
+  sponsorPrice15   Int      @default(8000)
+  sponsorPrice30   Int      @default(12000)
+  sponsorPrice60   Int      @default(20000)
+  currency         String   @default("XOF")
+  platformLogo     String?
+  updatedBy        String?
+  updatedAt        DateTime @updatedAt
+}

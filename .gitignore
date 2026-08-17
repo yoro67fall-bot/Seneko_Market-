@@ -1,0 +1,82 @@
+# Client chats and private notes
+*.txt
+client_chat.txt
+*_chat.txt
+
+# Original client dump (the live UI is public/index.html)
+Code Plateforme Seneko.html
+
+# Local API URL (keep public/api-config.example.json)
+public/api-config.json
+**/api-config.json
+!public/api-config.example.json
+
+# Leftover Firebase / nested static copies
+.firebase/
+.firebaserc
+firebase-debug.log*
+firestore-debug.log*
+pubsub-debug.log*
+storage-debug.log*
+ui-debug.log*
+**/firebase-config.json
+**/firebase-config.*.json
+!**/firebase-config.example.json
+public/public/
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+!**/.env.example
+.secret.local
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+*firebase-adminsdk*.json
+**/serviceAccount*.json
+*credentials*.json
+secrets/
+naboopay*.json
+
+# Dependencies and generated output
+node_modules/
+functions/node_modules/
+functions/lib/
+functions/lib-test/
+dist/
+build/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Local uploads / database dumps
+uploads/
+functions/uploads/
+data/
+*.sqlite
+*.sqlite3
+*.sql.gz
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor / tooling
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.cursor/
+.codex/
+
+# Test caches
+.vitest/
+functions/node_modules/.vite/
