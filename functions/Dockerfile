@@ -10,4 +10,4 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 ENV NODE_ENV=production
-CMD ["sh", "-c", "npx prisma migrate deploy && node lib/server.js"]
+CMD ["node", "lib/server.js"]

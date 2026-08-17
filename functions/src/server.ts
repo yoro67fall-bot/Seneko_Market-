@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
@@ -266,6 +268,19 @@ function errorHandler(
 
 app.use(errorHandler);
 
+const execFileAsync = promisify(execFile);
+
+async function runMigrations(): Promise<void> {
+  const prismaBin = path.join(process.cwd(), "node_modules", ".bin", "prisma");
+  console.log("boot: running prisma migrate deploy");
+  const result = await execFileAsync(prismaBin, ["migrate", "deploy"], {
+    env: process.env,
+  });
+  if (result.stdout) console.log(result.stdout);
+  if (result.stderr) console.error(result.stderr);
+  console.log("boot: migrations complete");
+}
+
 async function ensureUploadRoot(): Promise<void> {
   const root = getUploadRoot();
   try {
@@ -294,6 +309,7 @@ async function start(): Promise<void> {
   });
   await ensureUploadRoot();
   try {
+    await runMigrations();
     await getPlatformConfig();
     console.log("boot: platform config ready");
     await bootstrapAdmin();
