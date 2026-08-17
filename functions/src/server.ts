@@ -266,15 +266,41 @@ function errorHandler(
 
 app.use(errorHandler);
 
+async function ensureUploadRoot(): Promise<void> {
+  const root = getUploadRoot();
+  try {
+    await Promise.race([
+      mkdir(root, { recursive: true }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`mkdir timed out for ${root}`)), 8_000);
+      }),
+    ]);
+    console.log(`boot: uploads directory ready at ${root}`);
+  } catch (error) {
+    console.error("boot: could not prepare uploads directory", error);
+  }
+}
+
 async function start(): Promise<void> {
+  console.log("boot: starting");
   getJwtSecret();
-  await mkdir(getUploadRoot(), { recursive: true });
-  await getPlatformConfig();
-  await bootstrapAdmin();
   const port = Number(process.env.PORT ?? 8080);
-  app.listen(port, () => {
-    console.log(`Seneko Market API listening on ${port}`);
+  await new Promise<void>((resolve, reject) => {
+    const server = app.listen(port, "0.0.0.0", () => {
+      console.log(`Seneko Market API listening on 0.0.0.0:${port}`);
+      resolve();
+    });
+    server.on("error", reject);
   });
+  await ensureUploadRoot();
+  try {
+    await getPlatformConfig();
+    console.log("boot: platform config ready");
+    await bootstrapAdmin();
+    console.log("boot: admin ready");
+  } catch (error) {
+    console.error("boot: database init failed", error);
+  }
 }
 
 start().catch((error) => {
