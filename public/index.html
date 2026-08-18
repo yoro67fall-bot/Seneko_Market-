@@ -5737,6 +5737,7 @@ SCRIPT COMPLET
     // DONNÉES : BOUTIQUES
     // ================================================================
     let rentAmount = 5000;
+    let platformRentAmount = 5000;
     let isDemoMode = false;
     let platformLogo = null;
     let shopsData = [{
@@ -6076,10 +6077,10 @@ SCRIPT COMPLET
       if (isDemoMode) {
         rentAmount = 10;
         showToast('success', '🧪 Mode Démo activé',
-          'Le loyer est maintenant à 10 F pour tester toutes les fonctionnalités !');
+          'Le loyer affiché sur la page d\'accueil est à 10 F pour la démo. Le paiement réel reste au montant configuré par l\'admin.');
       } else {
-        rentAmount = 5000;
-        showToast('info', 'Mode Démo désactivé', 'Retour au mode normal avec loyer à 5 000 F.');
+        rentAmount = platformRentAmount;
+        showToast('info', 'Mode Démo désactivé', `Retour au mode normal avec loyer à ${platformRentAmount.toLocaleString()} F.`);
       }
       updateRentDisplay();
       renderShops();
@@ -6486,14 +6487,22 @@ SCRIPT COMPLET
     }
 
     function updateRentDisplay() {
-      const elements = document.querySelectorAll('#heroRentAmount, #stepRentAmount, #paymentRentAmount, #payButtonAmount, #ctaRentAmount, #footerRentAmount, #dashboardRentAmount, #dashboardRentDisplay');
-      elements.forEach(el => {
-        if (el) el.textContent = rentAmount.toLocaleString();
+      const paymentAmount = platformRentAmount.toLocaleString();
+      const displayAmount = rentAmount.toLocaleString();
+      const paymentIds = ['#paymentRentAmount', '#payButtonAmount'];
+      const generalIds = ['#heroRentAmount', '#stepRentAmount', '#ctaRentAmount', '#footerRentAmount', '#dashboardRentAmount', '#dashboardRentDisplay'];
+      paymentIds.forEach(id => {
+        const el = document.querySelector(id);
+        if (el) el.textContent = paymentAmount;
+      });
+      generalIds.forEach(id => {
+        const el = document.querySelector(id);
+        if (el) el.textContent = id.includes('dashboard') ? displayAmount + ' F' : displayAmount;
       });
       const dashRent = document.getElementById('dashboardRentAmount');
       const dashRentDisplay = document.getElementById('dashboardRentDisplay');
-      if (dashRent) dashRent.textContent = rentAmount.toLocaleString() + ' F';
-      if (dashRentDisplay) dashRentDisplay.textContent = rentAmount.toLocaleString() + ' F';
+      if (dashRent) dashRent.textContent = displayAmount + ' F';
+      if (dashRentDisplay) dashRentDisplay.textContent = displayAmount + ' F';
     }
     // ================================================================
     // ADMIN - ESPACE PUBLICITAIRE
@@ -8393,6 +8402,7 @@ SCRIPT COMPLET
           isLoggedIn,
           isAdmin,
           rentAmount,
+          platformRentAmount,
           selectedPaymentMethod,
           selectedSponsorOption,
           productImages,
@@ -8411,7 +8421,10 @@ SCRIPT COMPLET
         if (Array.isArray(sponsorings)) sponsoringsData = sponsorings;
       },
       setConfig(config = {}) {
-        if (Number.isInteger(config.rentAmount)) rentAmount = config.rentAmount;
+        if (Number.isInteger(config.rentAmount)) {
+          platformRentAmount = config.rentAmount;
+          if (!isDemoMode) rentAmount = config.rentAmount;
+        }
         if (config.platformLogo !== undefined) platformLogo = config.platformLogo || null;
         if (config.sponsorPrices) {
           sponsorOptions.forEach(option => {

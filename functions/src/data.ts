@@ -1,6 +1,7 @@
 import { ApiError } from "./errors.js";
 import type { Product, Shop, User, PlatformConfig as ConfigRow } from "@prisma/client";
 import { prisma } from "./prisma.js";
+import { toInternationalPhone } from "./payments/helpers.js";
 import { toPublicAssetUrl } from "./uploads.js";
 
 export const DEFAULT_PLATFORM_CONFIG = {
@@ -44,7 +45,11 @@ export function normalizeShopName(name: string): string {
 }
 
 export function normalizeWhatsApp(phone: string): string {
-  return phone.replace(/[^0-9]/g, "");
+  try {
+    return toInternationalPhone(phone).slice(1);
+  } catch {
+    return phone.replace(/[^0-9]/g, "");
+  }
 }
 
 export function toIso(value: Date | string | null | undefined): string | null {

@@ -36,6 +36,9 @@ describe("NabooPay helpers", () => {
   it("formats Senegal phone numbers for NabooPay", () => {
     expect(toInternationalPhone("221 77 123 45 67")).toBe("+221771234567");
     expect(toInternationalPhone("+221771234567")).toBe("+221771234567");
+    expect(toInternationalPhone("785305575")).toBe("+221785305575");
+    expect(toInternationalPhone("0785305575")).toBe("+221785305575");
+    expect(() => toInternationalPhone("123")).toThrow();
   });
 
   it("verifies HMAC signatures against the raw webhook body", () => {

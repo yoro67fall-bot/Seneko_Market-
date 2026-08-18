@@ -634,6 +634,13 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
 
 window.processPayment = () => runAction(async () => {
   if (!getToken()) throw new Error("Veuillez vous connecter avant de payer.");
+  const shop = currentShop();
+  if (!shop) throw new Error("Boutique introuvable.");
+  const method = ui.getState().selectedPaymentMethod;
+  if (method !== "visa") {
+    const phone = document.getElementById("phoneNumber")?.value.trim() || shop.phone || "";
+    if (!phone) throw new Error("Veuillez saisir votre numéro de téléphone.");
+  }
   await startCheckout({ purpose: "rent" });
 }, "Paiement impossible");
 

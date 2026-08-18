@@ -25,7 +25,6 @@ import {
 } from "../data.js";
 import {
   appendQuery,
-  mapPaymentMethod,
   normalizeNabooPayStatus,
   parseAllowedOrigins,
   parseXofAmount,
@@ -138,7 +137,7 @@ export async function createPayment(request: HandlerRequest) {
     } catch {
       throw new ApiError(
         "invalid-argument",
-        "A valid payer phone number is required.",
+        "Un numéro de téléphone sénégalais valide est requis (ex: 77 123 45 67).",
       );
     }
 
@@ -194,7 +193,7 @@ export async function createPayment(request: HandlerRequest) {
     });
 
     const checkout = await createTransaction({
-      methodOfPayment: [mapPaymentMethod(input.paymentMethod)],
+      methodOfPayment: ["wave", "orange_money", "bank"],
       productName:
         input.purpose === "rent"
           ? "Loyer Seneko Market"

@@ -92,7 +92,19 @@ export function mapPaymentMethod(
 export function toInternationalPhone(phone: string): string {
   const digits = phone.replace(/[^0-9]/g, "");
   if (!digits) throw new Error("A payer phone number is required.");
-  return `+${digits}`;
+  let normalized = digits;
+  if (normalized.startsWith("221") && normalized.length >= 12) {
+    normalized = normalized.slice(0, 12);
+  } else if (normalized.length === 9 && /^7/.test(normalized)) {
+    normalized = `221${normalized}`;
+  } else if (normalized.length === 10 && normalized.startsWith("0")) {
+    normalized = `221${normalized.slice(1)}`;
+  }
+  const international = `+${normalized}`;
+  if (!/^\+2217\d{8}$/.test(international)) {
+    throw new Error("A valid Senegal mobile number is required.");
+  }
+  return international;
 }
 
 export function parseAllowedOrigins(raw: string): string[] {
