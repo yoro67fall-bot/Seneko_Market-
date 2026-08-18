@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
-import { getCorsOrigins, getJwtSecret, getUploadRoot } from "./config.js";
+import { getJwtSecret, getUploadRoot, isAllowedCorsOrigin } from "./config.js";
 import { ApiError, parseInput, type AuthContext, type HandlerRequest } from "./errors.js";
 import { bootstrapAdmin, loginUser, registerUser, verifyToken } from "./auth.js";
 import { prisma } from "./prisma.js";
@@ -88,7 +88,9 @@ const app = express();
 app.disable("x-powered-by");
 app.use(
   cors({
-    origin: getCorsOrigins(),
+    origin(origin, callback) {
+      callback(null, isAllowedCorsOrigin(origin));
+    },
     credentials: true,
   }),
 );

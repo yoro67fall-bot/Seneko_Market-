@@ -29,7 +29,28 @@ export function getCorsOrigins(): string[] {
         "http://localhost:5000",
         "http://127.0.0.1:8888",
         "http://localhost:8888",
+        "https://fantastic-meringue-c930af.netlify.app",
       ];
+}
+
+export function isAllowedCorsOrigin(origin: string | undefined): boolean {
+  if (!origin) return true;
+  if (getCorsOrigins().includes(origin)) return true;
+  try {
+    const url = new URL(origin);
+    if (url.protocol === "https:" && url.hostname.endsWith(".netlify.app")) {
+      return true;
+    }
+    if (
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1"
+    ) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 export function getNabooPayApiKey(): string {
