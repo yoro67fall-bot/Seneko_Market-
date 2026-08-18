@@ -6115,7 +6115,8 @@ SCRIPT COMPLET
           previewContainer.innerHTML = `<i class="fas fa-store"></i>`;
         }
       }
-      document.getElementById('logoStatusDisplay').textContent = platformLogo ? 'Logo personnalisé' : 'Logo par défaut';
+      const logoStatus = document.getElementById('logoStatusDisplay');
+      if (logoStatus) logoStatus.textContent = platformLogo ? 'Logo personnalisé' : 'Logo par défaut';
     }
     document.getElementById('logoUploadInput').addEventListener('change', function(e) {
       const file = e.target.files[0];
@@ -6480,8 +6481,10 @@ SCRIPT COMPLET
       elements.forEach(el => {
         if (el) el.textContent = rentAmount.toLocaleString();
       });
-      document.getElementById('dashboardRentAmount').textContent = rentAmount.toLocaleString() + ' F';
-      document.getElementById('dashboardRentDisplay').textContent = rentAmount.toLocaleString() + ' F';
+      const dashRent = document.getElementById('dashboardRentAmount');
+      const dashRentDisplay = document.getElementById('dashboardRentDisplay');
+      if (dashRent) dashRent.textContent = rentAmount.toLocaleString() + ' F';
+      if (dashRentDisplay) dashRentDisplay.textContent = rentAmount.toLocaleString() + ' F';
     }
     // ================================================================
     // ADMIN - ESPACE PUBLICITAIRE
@@ -7259,8 +7262,10 @@ SCRIPT COMPLET
         }
         return acc;
       }, 0);
-      document.getElementById('heroStatShops').textContent = totalShops;
-      document.getElementById('heroStatProducts').textContent = totalProducts;
+      const heroShops = document.getElementById('heroStatShops');
+      const heroProducts = document.getElementById('heroStatProducts');
+      if (heroShops) heroShops.textContent = totalShops;
+      if (heroProducts) heroProducts.textContent = totalProducts;
     }
     // ================================================================
     // DÉTAILS BOUTIQUE
@@ -7506,14 +7511,18 @@ SCRIPT COMPLET
       const pendingShops = shopsData.filter(s => s.approved === false).length;
       const totalProducts = shopsData.reduce((acc, s) => acc + (s.products ? s.products.length : 0), 0);
       const paidRent = shopsData.filter(s => s.rentPaid).length;
-      document.getElementById('adminTotalShops').textContent = totalShops;
-      document.getElementById('adminPendingShops').textContent = pendingShops;
-      document.getElementById('adminTotalProducts').textContent = totalProducts;
-      document.getElementById('adminTotalRent').textContent = paidRent;
-      document.getElementById('dashTotalShops').textContent = totalShops;
-      document.getElementById('dashPendingShops').textContent = pendingShops;
-      document.getElementById('dashTotalProducts').textContent = totalProducts;
-      document.getElementById('dashTotalRent').textContent = paidRent;
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      };
+      setText('adminTotalShops', totalShops);
+      setText('adminPendingShops', pendingShops);
+      setText('adminTotalProducts', totalProducts);
+      setText('adminTotalRent', paidRent);
+      setText('dashTotalShops', totalShops);
+      setText('dashPendingShops', pendingShops);
+      setText('dashTotalProducts', totalProducts);
+      setText('dashTotalRent', paidRent);
       updateAdminChart();
       const shopList = document.getElementById('adminShopList');
       shopList.innerHTML = '';
@@ -8106,11 +8115,15 @@ SCRIPT COMPLET
       const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       document.getElementById('dashboardNextPayment').textContent =
         `1er ${nextMonth.toLocaleString('fr-FR', { month: 'long' })}`;
-      document.getElementById('statVisits').textContent = Math.floor(1000 + Math.random() * 500);
-      document.getElementById('statContacts').textContent = Math.floor(50 + Math.random() * 80);
-      document.getElementById('statDaysActive').textContent = Math.floor(20 + Math.random() * 10);
-      document.getElementById('dashboardRentAmount').textContent = rentAmount.toLocaleString() + ' F';
-      document.getElementById('dashboardRentDisplay').textContent = rentAmount.toLocaleString() + ' F';
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      };
+      setText('statVisits', Math.floor(1000 + Math.random() * 500));
+      setText('statContacts', Math.floor(50 + Math.random() * 80));
+      setText('statDaysActive', Math.floor(20 + Math.random() * 10));
+      setText('dashboardRentAmount', rentAmount.toLocaleString() + ' F');
+      setText('dashboardRentDisplay', rentAmount.toLocaleString() + ' F');
       initChart();
       updateReminderUI();
     }

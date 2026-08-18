@@ -791,12 +791,14 @@ if (legacyLogoInput) {
 
 const originalSelectPaymentMethod = window.selectPaymentMethod;
 window.selectPaymentMethod = method => {
-  originalSelectPaymentMethod(method);
-  document.getElementById("operatorField").style.display = "none";
-  if (method === "visa") {
-    document.getElementById("cardFields").style.display = "none";
-  }
+  if (typeof originalSelectPaymentMethod === "function") originalSelectPaymentMethod(method);
+  const operatorField = document.getElementById("operatorField");
+  const cardFields = document.getElementById("cardFields");
+  if (operatorField) operatorField.style.display = "none";
+  if (method === "visa" && cardFields) cardFields.style.display = "none";
 };
-window.selectPaymentMethod(ui.getState().selectedPaymentMethod);
+if (typeof originalSelectPaymentMethod === "function") {
+  window.selectPaymentMethod(ui.getState().selectedPaymentMethod);
+}
 
 initializeBackend();
