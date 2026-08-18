@@ -193,7 +193,10 @@ export async function createPayment(request: HandlerRequest) {
     });
 
     const checkout = await createTransaction({
-      methodOfPayment: ["wave", "orange_money", "bank"],
+      methodOfPayment:
+        input.paymentMethod === "card"
+          ? ["wave", "orange_money", "bank"]
+          : ["wave", "orange_money"],
       productName:
         input.purpose === "rent"
           ? "Loyer Seneko Market"

@@ -5,6 +5,7 @@ import {
   hmacSha256Hex,
   mapPaymentMethod,
   normalizeNabooPayStatus,
+  parseAllowedOrigins,
   parseXofAmount,
   resolveRedirectUrl,
   toInternationalPhone,
@@ -66,5 +67,15 @@ describe("NabooPay helpers", () => {
     expect(() =>
       resolveRedirectUrl("https://evil.example/", "", ["https://seneko.example"]),
     ).toThrow();
+    expect(
+      resolveRedirectUrl(
+        "https://fantastic-meringue-c930af.netlify.app/?payment_return=success",
+        "https://example.com/?payment_return=success",
+        ["example.com"],
+      ),
+    ).toContain("fantastic-meringue-c930af.netlify.app");
+    expect(parseAllowedOrigins("fantastic-meringue-c930af.netlify.app")).toEqual([
+      "https://fantastic-meringue-c930af.netlify.app",
+    ]);
   });
 });

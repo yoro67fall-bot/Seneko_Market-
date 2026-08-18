@@ -110,8 +110,31 @@ export function toInternationalPhone(phone: string): string {
 export function parseAllowedOrigins(raw: string): string[] {
   return raw
     .split(",")
-    .map((value) => value.trim())
+    .map((value) => {
+      const trimmed = value.trim().replace(/^['"]|['"]$/g, "");
+      if (!trimmed) return "";
+      try {
+        const withProtocol = /^https?:\/\//i.test(trimmed)
+          ? trimmed
+          : `https://${trimmed}`;
+        return new URL(withProtocol).origin;
+      } catch {
+        return trimmed.replace(/\/$/, "");
+      }
+    })
     .filter(Boolean);
+}
+
+function isTrustedRedirectOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    if (url.protocol === "https:" && url.hostname.endsWith(".netlify.app")) {
+      return true;
+    }
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
 }
 
 export function resolveRedirectUrl(
@@ -119,21 +142,30 @@ export function resolveRedirectUrl(
   fallback: string,
   allowedOrigins: string[],
 ): string {
-  const value = (requested ?? fallback).trim();
-  if (!value) {
+  const candidates = [requested, fallback]
+    .map((value) => value?.trim() ?? "")
+    .filter(Boolean);
+  if (candidates.length === 0) {
     throw new Error("A payment redirect URL is not configured.");
   }
-  const url = new URL(value);
-  const isLocal =
-    url.hostname === "localhost" || url.hostname === "127.0.0.1";
-  if (allowedOrigins.length === 0) {
-    if (isLocal || (fallback && value === fallback.trim())) return value;
-    throw new Error("Redirect URL origin is not allowed.");
+  for (const value of candidates) {
+    try {
+      const url = new URL(value);
+      const origin = url.origin;
+      const isLocal =
+        url.hostname === "localhost" || url.hostname === "127.0.0.1";
+      if (
+        isTrustedRedirectOrigin(origin) ||
+        allowedOrigins.includes(origin) ||
+        (allowedOrigins.length === 0 && (isLocal || value === fallback.trim()))
+      ) {
+        return value;
+      }
+    } catch {
+      continue;
+    }
   }
-  if (!allowedOrigins.includes(url.origin)) {
-    throw new Error("Redirect URL origin is not allowed.");
-  }
-  return value;
+  throw new Error("Redirect URL origin is not allowed.");
 }
 
 export function appendQuery(url: string, params: Record<string, string>): string {
