@@ -7,25 +7,30 @@ const trimmed = (min: number, max: number) =>
     .min(min)
     .max(max)
     .refine(
-      (value) => !/[<>`"\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value),
+      (value) => !/[<>\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value),
       "HTML-significant or control characters are not allowed",
     );
 
-const httpsUrl = z
+const assetUrl = z
   .string()
   .trim()
   .max(2048)
-  .url()
-  .refine((value) => !/[<>`"\u0000-\u001F\u007F]/.test(value), "Unsafe URL")
+  .refine((value) => !/[<>`\u0000-\u001F\u007F]/.test(value), "Unsafe URL")
   .refine((value) => {
-    return (
-      value.startsWith("https://") ||
-      value.startsWith("http://127.0.0.1") ||
-      value.startsWith("http://localhost")
-    );
-  }, "HTTPS URL required");
+    if (value.startsWith("/uploads/") && !value.includes("..")) return true;
+    try {
+      const url = new URL(value);
+      return (
+        url.protocol === "https:" ||
+        (url.protocol === "http:" &&
+          (url.hostname === "127.0.0.1" || url.hostname === "localhost"))
+      );
+    } catch {
+      return false;
+    }
+  }, "A valid image URL is required");
 
-const optionalUrl = httpsUrl.optional().nullable();
+const optionalUrl = assetUrl.optional().nullable();
 
 const phone = trimmed(5, 32).regex(
   /^[+0-9][0-9 +().-]*$/,
@@ -62,6 +67,13 @@ export const bootstrapPublicSchema = z
 
 export const publicShopSchema = z
   .object({ shopId: z.string().trim().min(1).max(128) })
+  .strict();
+
+export const shopEventSchema = z
+  .object({
+    shopId: z.string().trim().min(1).max(128),
+    type: z.enum(["visit", "contact"]),
+  })
   .strict();
 
 export const merchantProfileSchema = z
@@ -121,7 +133,7 @@ export const upsertProductSchema = z
     price: z.number().int().min(0).max(2_000_000_000),
     description: trimmed(1, 2000),
     category: trimmed(1, 100).optional(),
-    images: z.array(httpsUrl).min(1).max(10),
+    images: z.array(assetUrl).min(1).max(10),
   })
   .strict();
 
@@ -161,7 +173,7 @@ export const createPaymentSchema = z
     paymentMethod: z.enum(["orange", "wave", "card"]),
     payerPhone: phone.optional(),
     sponsorOption: sponsorOptionSchema.optional(),
-    bannerImages: z.array(httpsUrl).max(5).default([]),
+    bannerImages: z.array(assetUrl).max(5).default([]),
     returnUrl: redirectUrl.optional(),
     cancelUrl: redirectUrl.optional(),
     idempotencyKey: z
@@ -204,7 +216,7 @@ export const submitSponsorshipSchema = z
   .object({
     shopId: z.string().trim().min(1).max(128),
     paymentId: z.string().trim().min(1).max(128),
-    bannerImages: z.array(httpsUrl).min(1).max(5).optional(),
+    bannerImages: z.array(assetUrl).min(1).max(5).optional(),
   })
   .strict();
 

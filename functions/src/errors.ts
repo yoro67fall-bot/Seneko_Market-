@@ -20,6 +20,7 @@ export type AuthContext = {
 export type HandlerRequest = {
   data: unknown;
   auth?: AuthContext;
+  ip?: string;
 };
 
 export function parseInput<TSchema extends z.ZodType>(
@@ -28,12 +29,15 @@ export function parseInput<TSchema extends z.ZodType>(
 ): z.infer<TSchema> {
   const parsed = schema.safeParse(data ?? {});
   if (!parsed.success) {
-    throw new ApiError("invalid-argument", "Invalid request data.", {
-      issues: parsed.error.issues.map((issue) => ({
-        path: issue.path.join("."),
-        message: issue.message,
-      })),
-    });
+    const issues = parsed.error.issues.map((issue) => ({
+      path: issue.path.join("."),
+      message: issue.message,
+    }));
+    throw new ApiError(
+      "invalid-argument",
+      issues[0]?.message || "Invalid request data.",
+      { issues },
+    );
   }
   return parsed.data;
 }

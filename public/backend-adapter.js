@@ -11,9 +11,11 @@ function toast(type, title, message) {
 
 function errorMessage(error) {
   const code = String(error?.code || "");
+  const details = error?.details?.issues;
+  const firstDetail = Array.isArray(details) && details[0]?.message ? String(details[0].message) : "";
+  const raw = String(error?.message || firstDetail || "Une erreur inattendue est survenue.");
   const known = {
     "invalid-credential": "Email ou mot de passe incorrect.",
-    "invalid-argument": error?.message || "Requête invalide.",
     "email-already-in-use": "Cette adresse email est déjà utilisée.",
     "weak-password": "Le mot de passe doit contenir au moins 8 caractères.",
     "invalid-email": "L'adresse email n'est pas valide.",
@@ -25,8 +27,16 @@ function errorMessage(error) {
     unavailable: "Le service est momentanément indisponible. Veuillez réessayer.",
     "deadline-exceeded": "Le service de paiement met trop de temps à répondre. Veuillez réessayer."
   };
-  if (known[code]) return known[code];
-  return String(error?.message || "Une erreur inattendue est survenue.");
+  if (known[code] && code !== "invalid-argument") return known[code];
+  if (/too large|file size|LIMIT_FILE_SIZE/i.test(raw)) {
+    return "L'image est trop lourde. Essayez une photo plus légère (moins de 12 Mo).";
+  }
+  if (/valid image url|https url/i.test(raw)) {
+    return "L'image n'a pas pu être enregistrée. Réessayez avec une autre photo.";
+  }
+  if (/A file is required/i.test(raw)) return "Veuillez sélectionner une image.";
+  if (code === "invalid-argument") return raw === "Invalid request data." ? "Requête invalide. Vérifiez les champs du formulaire." : raw;
+  return raw;
 }
 
 async function runAction(action, title = "Erreur") {
@@ -129,10 +139,19 @@ async function apiFetch(path, { method = "POST", body, formData } = {}) {
     headers,
     body: formData ?? (method === "GET" ? undefined : JSON.stringify(body ?? {}))
   });
-  const payload = await response.json().catch(() => ({}));
+  const text = await response.text();
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = {};
+  }
   if (!response.ok) {
-    const error = new Error(payload?.error?.message || "La requête a échoué.");
+    const error = new Error(payload?.error?.message || (response.status === 413
+      ? "L'image est trop lourde."
+      : "La requête a échoué."));
     error.code = payload?.error?.status || `http-${response.status}`;
+    error.details = payload?.error?.details || null;
     throw error;
   }
   return payload.result;
@@ -189,6 +208,12 @@ function normalizeShop(shop) {
     approved: shop.approved === true,
     visible: shop.visible === true,
     sponsored: shop.sponsored === true,
+    visitCount: Number(shop.visitCount || 0),
+    contactCount: Number(shop.contactCount || 0),
+    daysActive: Number(shop.daysActive || 1),
+    dailyVisits: Array.isArray(shop.dailyVisits) ? shop.dailyVisits : [0, 0, 0, 0, 0, 0, 0],
+    recentActivity: Array.isArray(shop.recentActivity) ? shop.recentActivity : [],
+    createdAt: shop.createdAt || null,
     logo: shop.logo || String(shop.name || "S").charAt(0).toUpperCase(),
     whatsapp: String(shop.whatsapp || shop.phone || "").replace(/\D/g, "")
   };
@@ -290,9 +315,13 @@ async function refreshCurrentData() {
 
 function currentShop() {
   const state = ui.getState();
+  const user = state.currentUser;
+  if (!user) return null;
   return state.shops.find(shop =>
-    shop.backendId === state.currentUser?.shopId || shop.name === state.currentUser?.shopName
-  );
+    (user.shopId && shop.backendId === user.shopId) ||
+    (user.uid && shop.ownerUid === user.uid) ||
+    (user.shopName && shop.name === user.shopName)
+  ) || null;
 }
 
 function shopByClientId(clientId) {
@@ -314,23 +343,69 @@ function parseXof(value) {
 }
 
 function dataUrlToBlob(dataUrl) {
-  const [metadata, content] = dataUrl.split(",", 2);
-  const match = metadata.match(/^data:([^;]+);base64$/i);
-  if (!match || !content) throw new Error("Image invalide.");
+  const [metadata, content] = String(dataUrl).split(",", 2);
+  if (!content) throw new Error("Image invalide.");
+  const match = metadata.match(/^data:([^;,]+)/i);
+  const type = match?.[1] || "image/jpeg";
   const bytes = atob(content);
   const buffer = new Uint8Array(bytes.length);
   for (let index = 0; index < bytes.length; index += 1) buffer[index] = bytes.charCodeAt(index);
-  return new Blob([buffer], { type: match[1] });
+  return new Blob([buffer], { type });
 }
 
 function extensionFor(type) {
   const extensions = {
     "image/jpeg": "jpg",
+    "image/jpg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
     "image/gif": "gif"
   };
-  return extensions[type] || "bin";
+  return extensions[type] || "jpg";
+}
+
+async function canvasFromBlob(blob) {
+  try {
+    return await createImageBitmap(blob);
+  } catch {
+    const url = URL.createObjectURL(blob);
+    try {
+      return await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("Image invalide."));
+        image.src = url;
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+}
+
+async function compressImage(fileOrDataUrl) {
+  const blob = typeof fileOrDataUrl === "string"
+    ? dataUrlToBlob(fileOrDataUrl)
+    : fileOrDataUrl;
+  if (!blob) throw new Error("Image invalide.");
+  try {
+    const image = await canvasFromBlob(blob);
+    const max = 1600;
+    const scale = Math.min(1, max / Math.max(image.width || 1, image.height || 1));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round((image.width || 1) * scale));
+    canvas.height = Math.max(1, Math.round((image.height || 1) * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Image invalide.");
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const compressed = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.82));
+    if (compressed && compressed.size > 0) {
+      return new File([compressed], "image.jpg", { type: "image/jpeg" });
+    }
+  } catch (error) {
+    console.warn("Image compression failed, using original file", error);
+  }
+  if (blob instanceof File) return blob;
+  return new File([blob], `image.${extensionFor(blob.type)}`, { type: blob.type || "image/jpeg" });
 }
 
 async function uploadToApi(file, kind, shopId) {
@@ -342,21 +417,19 @@ async function uploadToApi(file, kind, shopId) {
 }
 
 async function uploadPrivateIdentity(file) {
-  const saved = await uploadToApi(file, "identity");
+  const saved = await uploadToApi(await compressImage(file), "identity");
   return saved.path;
 }
 
 async function uploadPublicDataUrl(dataUrl, kind, shopId) {
-  if (!String(dataUrl).startsWith("data:")) return dataUrl;
-  const blob = dataUrlToBlob(dataUrl);
-  const file = new File([blob], `image.${extensionFor(blob.type)}`, { type: blob.type });
-  const saved = await uploadToApi(file, kind, shopId);
+  if (dataUrl && !String(dataUrl).startsWith("data:")) return dataUrl;
+  const saved = await uploadToApi(await compressImage(dataUrl), kind, shopId);
   return saved.url;
 }
 
 async function uploadPublicFile(file, kind, shopId) {
   if (!file) throw new Error("Fichier manquant.");
-  const saved = await uploadToApi(file, kind, shopId);
+  const saved = await uploadToApi(await compressImage(file), kind, shopId);
   return saved.url;
 }
 
@@ -449,7 +522,7 @@ document.querySelector("#form-login .form-options a")?.addEventListener("click",
 
 window.saveShopConfig = () => runAction(async () => {
   const shop = currentShop();
-  if (!shop) throw new Error("Boutique introuvable.");
+  if (!shop) throw new Error("Boutique introuvable. Reconnectez-vous puis réessayez.");
   const state = ui.getState();
   const name = document.getElementById("shopConfigName").value.trim();
   const category = document.getElementById("shopConfigCategory").value;
@@ -458,8 +531,12 @@ window.saveShopConfig = () => runAction(async () => {
   const email = document.getElementById("shopConfigEmail").value.trim();
   if (!name || !category || !description || !phone) throw new Error("Veuillez remplir tous les champs obligatoires.");
 
+  toast("info", "Enregistrement...", "Envoi des informations de la boutique.");
   let facade = state.shopFacadeImage || shop.facade || null;
-  if (facade?.startsWith("data:")) {
+  const facadeFile = document.getElementById("shopFacadeInput")?.files?.[0];
+  if (facadeFile) {
+    facade = await uploadPublicFile(facadeFile, "facade", shop.backendId);
+  } else if (facade?.startsWith("data:")) {
     facade = await uploadPublicDataUrl(facade, "facade", shop.backendId);
   }
   await backend("updateMyShop", {
@@ -479,7 +556,7 @@ window.saveShopConfig = () => runAction(async () => {
 
 window.addProduct = () => runAction(async () => {
   const shop = currentShop();
-  if (!shop) throw new Error("Boutique introuvable.");
+  if (!shop) throw new Error("Boutique introuvable. Reconnectez-vous puis réessayez.");
   const state = ui.getState();
   const name = document.getElementById("productName").value.trim();
   const price = parseXof(document.getElementById("productPrice").value);
@@ -488,6 +565,7 @@ window.addProduct = () => runAction(async () => {
   if (!name || !price || !description) throw new Error("Veuillez remplir tous les champs obligatoires.");
   if (!state.productImages.length) throw new Error("Ajoutez au moins une image pour le produit.");
 
+  toast("info", "Enregistrement...", "Envoi du produit et des images.");
   const editingProduct = shop.products.find(product => Number(product.id) === Number(state.editingProductId));
   const images = await uploadImages(state.productImages, "product", shop.backendId);
   await backend("upsertProduct", {
@@ -800,5 +878,27 @@ window.selectPaymentMethod = method => {
 if (typeof originalSelectPaymentMethod === "function") {
   window.selectPaymentMethod(ui.getState().selectedPaymentMethod);
 }
+
+function trackShopEvent(shopId, type) {
+  if (!shopId || !services?.apiUrl) return;
+  backend("recordShopEvent", { shopId, type }).catch(() => {});
+}
+
+const originalShowShopDetail = window.showShopDetail;
+window.showShopDetail = shopId => {
+  if (typeof originalShowShopDetail === "function") originalShowShopDetail(shopId);
+  const shop = shopByClientId(shopId);
+  if (shop?.backendId) trackShopEvent(shop.backendId, "visit");
+};
+
+document.addEventListener("click", event => {
+  const link = event.target instanceof Element
+    ? event.target.closest("[data-track-contact]")
+    : null;
+  if (!link) return;
+  const trackedId = link.getAttribute("data-track-contact");
+  const shop = shopByClientId(trackedId);
+  if (shop?.backendId) trackShopEvent(shop.backendId, "contact");
+});
 
 initializeBackend();

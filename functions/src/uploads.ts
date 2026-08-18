@@ -5,7 +5,7 @@ import { getPublicApiUrl, getUploadRoot } from "./config.js";
 import { ApiError } from "./errors.js";
 
 const PUBLIC_KINDS = new Set(["facade", "product", "sponsorship", "banner", "branding"]);
-const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_BYTES = 12 * 1024 * 1024;
 
 function safeName(name: string): string {
   return (
@@ -17,6 +17,12 @@ function safeName(name: string): string {
   );
 }
 
+export function toPublicAssetUrl(value: string, baseUrl = getPublicApiUrl()): string {
+  if (!value) return value;
+  if (value.startsWith("/uploads/")) return `${baseUrl.replace(/\/$/, "")}${value}`;
+  return value;
+}
+
 export async function saveUpload(options: {
   buffer: Buffer;
   originalName: string;
@@ -24,6 +30,7 @@ export async function saveUpload(options: {
   kind: string;
   uid: string;
   shopId?: string;
+  publicBaseUrl?: string;
 }): Promise<{ url: string; path: string; public: boolean }> {
   if (options.buffer.length === 0 || options.buffer.length > MAX_BYTES) {
     throw new ApiError("invalid-argument", "The uploaded file is empty or too large.");
@@ -40,9 +47,10 @@ export async function saveUpload(options: {
   await mkdir(path.dirname(absolute), { recursive: true });
   await writeFile(absolute, options.buffer);
   const urlPath = `/uploads/${relative.split(path.sep).join("/")}`;
+  const baseUrl = (options.publicBaseUrl || getPublicApiUrl()).replace(/\/$/, "");
   return {
     path: relative.split(path.sep).join("/"),
-    url: isIdentity ? urlPath : `${getPublicApiUrl()}${urlPath}`,
+    url: isIdentity ? urlPath : `${baseUrl}${urlPath}`,
     public: !isIdentity,
   };
 }

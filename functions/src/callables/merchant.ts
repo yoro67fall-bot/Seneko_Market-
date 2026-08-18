@@ -17,6 +17,7 @@ import {
   publicProduct,
   serializeProfileWithShop,
 } from "../data.js";
+import { toPublicAssetUrl } from "../uploads.js";
 
 async function validateAgentCode(agentCode: string | null | undefined): Promise<void> {
   if (!agentCode) return;
@@ -131,6 +132,7 @@ export async function updateMyShop(request: HandlerRequest) {
     for (const key of ["category", "description", "phone", "email", "whatsapp", "facade", "logo", "icon"] as const) {
       if (input[key] !== undefined) data[key] = input[key];
     }
+    if (typeof data.facade === "string") data.facade = toPublicAssetUrl(data.facade);
     if (input.phone !== undefined && input.whatsapp === undefined) {
       data.whatsapp = normalizeWhatsApp(input.phone);
     }
@@ -190,6 +192,7 @@ export async function upsertProduct(request: HandlerRequest) {
     const auth = requireAuth(request);
     const input = parseInput(upsertProductSchema, request.data);
     const shop = await assertShopOwner(auth.uid, input.shopId);
+    const images = input.images.map((image) => toPublicAssetUrl(image));
     let product;
     if (input.productId) {
       const existingProduct = await prisma.product.findFirst({
@@ -205,7 +208,7 @@ export async function upsertProduct(request: HandlerRequest) {
           price: input.price,
           description: input.description,
           category: input.category ?? shop.category,
-          images: input.images,
+          images,
         },
       });
     } else {
@@ -217,7 +220,7 @@ export async function upsertProduct(request: HandlerRequest) {
           price: input.price,
           description: input.description,
           category: input.category ?? shop.category,
-          images: input.images,
+          images,
         },
       });
     }

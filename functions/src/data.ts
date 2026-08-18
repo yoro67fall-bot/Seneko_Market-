@@ -1,6 +1,7 @@
 import { ApiError } from "./errors.js";
 import type { Product, Shop, User, PlatformConfig as ConfigRow } from "@prisma/client";
 import { prisma } from "./prisma.js";
+import { toPublicAssetUrl } from "./uploads.js";
 
 export const DEFAULT_PLATFORM_CONFIG = {
   rentAmount: 5_000,
@@ -87,7 +88,7 @@ export function publicProduct(product: Product): Record<string, unknown> {
     price: product.price,
     description: product.description,
     category: product.category,
-    images: product.images,
+    images: product.images.map((image) => toPublicAssetUrl(image)),
     createdAt: toIso(product.createdAt),
     updatedAt: toIso(product.updatedAt),
   };
@@ -109,7 +110,7 @@ export function publicShop(
     email: shop.email,
     logo: shop.logo ?? shop.name.charAt(0).toUpperCase(),
     icon: shop.icon,
-    facade: shop.facade,
+    facade: shop.facade ? toPublicAssetUrl(shop.facade) : shop.facade,
     rentPaid: shop.rentPaid,
     rentPaidUntil: toIso(shop.rentPaidUntil),
     approved: shop.approved,
@@ -117,7 +118,7 @@ export function publicShop(
     sponsored,
     sponsorEndDate: sponsored ? toIso(shop.sponsorEndDate) : null,
     lastPayment: toIso(shop.lastPayment),
-    bannerImage: sponsored ? shop.bannerImage : null,
+    bannerImage: sponsored ? (shop.bannerImage ? toPublicAssetUrl(shop.bannerImage) : shop.bannerImage) : null,
     products: products.map(publicProduct),
   };
 }
@@ -176,7 +177,70 @@ export function fromConfigRow(row: ConfigRow): PlatformConfig {
     },
     sponsorDurations: { ...DEFAULT_PLATFORM_CONFIG.sponsorDurations },
     currency: "XOF",
-    platformLogo: row.platformLogo,
+    platformLogo: row.platformLogo ? toPublicAssetUrl(row.platformLogo) : row.platformLogo,
+  };
+}
+
+function utcDay(date = new Date(), offsetDays = 0): Date {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + offsetDays),
+  );
+}
+
+export async function getShopStats(shop: Shop): Promise<{
+  visitCount: number;
+  contactCount: number;
+  daysActive: number;
+  dailyVisits: number[];
+  recentActivity: Array<Record<string, string>>;
+}> {
+  const now = new Date();
+  const days = Array.from({ length: 7 }, (_, index) => utcDay(now, index - 6));
+  const from = days[0];
+  const [events, payments] = await Promise.all([
+    prisma.shopEvent.findMany({
+      where: { shopId: shop.id, day: { gte: from } },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.payment.findMany({
+      where: { shopId: shop.id, status: "completed" },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+    }),
+  ]);
+  const dailyVisits = days.map((day) => {
+    const key = day.toISOString().slice(0, 10);
+    return events
+      .filter((event) => event.type === "visit" && event.day.toISOString().slice(0, 10) === key)
+      .reduce((sum, event) => sum + event.count, 0);
+  });
+  const daysActive = Math.max(
+    1,
+    Math.floor((now.valueOf() - shop.createdAt.valueOf()) / 86_400_000) + 1,
+  );
+  const recentActivity: Array<Record<string, string>> = [
+    ...events.slice(0, 6).map((event) => ({
+      type: event.type,
+      title:
+        event.type === "contact"
+          ? `${event.count} contact${event.count > 1 ? "s" : ""} WhatsApp`
+          : `${event.count} visite${event.count > 1 ? "s" : ""}`,
+      at: toIso(event.updatedAt) ?? now.toISOString(),
+    })),
+    ...payments.map((payment) => ({
+      type: payment.purpose === "sponsor" ? "sponsor" : "payment",
+      title: payment.purpose === "sponsor" ? "Sponsoring activé" : "Loyer payé",
+      at: toIso(payment.appliedAt ?? payment.createdAt) ?? now.toISOString(),
+    })),
+  ]
+    .sort((left, right) => Date.parse(right.at) - Date.parse(left.at))
+    .slice(0, 6);
+  return {
+    visitCount: shop.visitCount,
+    contactCount: shop.contactCount,
+    daysActive,
+    dailyVisits,
+    recentActivity,
   };
 }
 
@@ -188,7 +252,8 @@ export async function getPrivateShopById(
     include: { products: { orderBy: { createdAt: "desc" }, take: 200 } },
   });
   if (!shop) return null;
-  return privateShop(shop, shop.products);
+  const stats = await getShopStats(shop);
+  return { ...privateShop(shop, shop.products), ...stats };
 }
 
 export async function serializeProfileWithShop(

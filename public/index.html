@@ -4852,10 +4852,10 @@
             </div>
           </div>
           <div class="form-actions">
-            <button class="btn btn-primary" onclick="saveShopConfig()">
+            <button type="button" class="btn btn-primary" onclick="saveShopConfig()">
               <i class="fas fa-save"></i> Enregistrer
             </button>
-            <button class="btn btn-secondary" onclick="resetShopConfig()">
+            <button type="button" class="btn btn-secondary" onclick="resetShopConfig()">
               <i class="fas fa-undo"></i> Réinitialiser
             </button>
           </div>
@@ -4902,10 +4902,10 @@
         </div>
 
         <div class="form-actions">
-          <button class="btn btn-success" onclick="addProduct()">
+          <button type="button" class="btn btn-success" onclick="addProduct()">
             <i class="fas fa-plus"></i> Ajouter le produit
           </button>
-          <button class="btn btn-secondary" onclick="resetProductForm()">
+          <button type="button" class="btn btn-secondary" onclick="resetProductForm()">
             <i class="fas fa-undo"></i> Réinitialiser
           </button>
         </div>
@@ -6029,6 +6029,15 @@ SCRIPT COMPLET
     let sponsorBannerImages = [];
     let idCardImage = null;
     let shopFacadeImage = null;
+
+    function findCurrentShop() {
+      if (!currentUser) return null;
+      return shopsData.find(shop =>
+        (currentUser.shopId && (shop.backendId === currentUser.shopId || shop.id === currentUser.shopId)) ||
+        (currentUser.uid && shop.ownerUid === currentUser.uid) ||
+        (currentUser.shopName && shop.name === currentUser.shopName)
+      ) || null;
+    }
     const sponsorOptions = [{
         id: '7days',
         label: '7 jours',
@@ -6207,7 +6216,7 @@ SCRIPT COMPLET
     // ================================================================
     function loadShopConfig() {
       if (!currentUser) return;
-      const shop = shopsData.find(s => s.name === currentUser.shopName);
+      const shop = findCurrentShop();
       if (!shop) return;
       document.getElementById('shopConfigName').value = shop.name;
       document.getElementById('shopConfigDescription').value = shop.description;
@@ -6670,7 +6679,7 @@ SCRIPT COMPLET
           opt.textContent = cat;
           catSelect.appendChild(opt);
         });
-        const shop = shopsData.find(s => s.name === currentUser.shopName);
+        const shop = findCurrentShop();
         if (shop) {
           const statusEl = document.getElementById('shopConfigStatus');
           if (shop.rentPaid && shop.approved !== false && shop.visible !== false) {
@@ -7241,7 +7250,7 @@ SCRIPT COMPLET
                                     <i class="fas fa-phone"></i> Appeler
                                 </a>
                                 ${shop.whatsapp ? `<a href="https://wa.me/${shop.whatsapp}?text=Bonjour%20%21%20Je%20viens%20de%20voir%20votre%20boutique%20%22${encodeURIComponent(shop.name)}%22%20sur%20Seneko%20Market.%20Je%20suis%20int%C3%A9ress%C3%A9%20par%20vos%20produits.%20Pouvez-vous%20me%20donner%20plus%20d%27informations%20%3F"
-                                   target="_blank" class="btn btn-whatsapp btn-sm" onclick="event.stopPropagation();">
+                                   target="_blank" class="btn btn-whatsapp btn-sm" data-track-contact="${shop.id}" onclick="event.stopPropagation();">
                                     <i class="fab fa-whatsapp"></i> WhatsApp
                                 </a>` : ''}
                             </div>
@@ -7302,7 +7311,7 @@ SCRIPT COMPLET
                                     <i class="fas fa-phone"></i> Appeler
                                 </a>
                                 ${shop.whatsapp ? `<a href="https://wa.me/${shop.whatsapp}?text=Bonjour%20%21%20Je%20viens%20de%20voir%20votre%20boutique%20%22${encodeURIComponent(shop.name)}%22%20sur%20Seneko%20Market.%20Je%20suis%20int%C3%A9ress%C3%A9%20par%20vos%20produits.%20Pouvez-vous%20me%20donner%20plus%20d%27informations%20%3F"
-                                   target="_blank" class="btn btn-whatsapp btn-sm" style="text-decoration:none;">
+                                   target="_blank" class="btn btn-whatsapp btn-sm" style="text-decoration:none;" data-track-contact="${shop.id}">
                                     <i class="fab fa-whatsapp"></i> WhatsApp
                                 </a>` : ''}
                             </div>
@@ -7339,7 +7348,7 @@ SCRIPT COMPLET
                             <div class="product-image-slider" id="slider-${product.id}">
                                 ${images.map(img => `
                                     <div class="slide">
-                                        ${/^(https?:\/\/|data:image\/|blob:)/i.test(img)
+                                        ${/^(https?:\/\/|data:image\/|blob:|\/uploads\/)/i.test(img)
                                           ? `<img src="${img}" alt="${product.name}" style="width:100%;height:100%;object-fit:cover;">`
                                           : `<span style="font-size: 4rem;">${img}</span>`}
                                     </div>
@@ -7370,7 +7379,7 @@ SCRIPT COMPLET
                                 <span><i class="fas fa-images"></i> ${images.length} images</span>
                             </div>
                             <a href="https://wa.me/${shop.whatsapp}?text=Bonjour%20%21%20Je%20suis%20int%C3%A9ress%C3%A9%20par%20le%20produit%20%22${encodeURIComponent(product.name)}%22%20%28${encodeURIComponent(product.price)}%29%20de%20votre%20boutique%20%22${encodeURIComponent(shop.name)}%22.%20Pouvez-vous%20me%20donner%20plus%20d%27informations%20%3F"
-                               target="_blank" class="product-contact-btn">
+                               target="_blank" class="product-contact-btn" data-track-contact="${shop.id}">
                                 <i class="fab fa-whatsapp"></i> Contacter
                             </a>
                             ${isOwner ? `
@@ -8074,7 +8083,7 @@ SCRIPT COMPLET
       }
       document.getElementById('dashboardUserName').textContent = `${currentUser.firstname} ${currentUser.lastname}`;
       document.getElementById('dashboardShopName').textContent = currentUser.shopName || 'Ma Boutique';
-      const shop = shopsData.find(s => s.name === currentUser.shopName) || shopsData[0];
+      const shop = findCurrentShop() || shopsData.find(s => s.name === currentUser.shopName) || shopsData[0];
       const statusDot = document.getElementById('shopStatusDot');
       const statusText = document.getElementById('shopStatusText');
       const isActive = shop && shop.rentPaid && shop.approved !== false && shop.visible !== false;
@@ -8119,25 +8128,97 @@ SCRIPT COMPLET
         const el = document.getElementById(id);
         if (el) el.textContent = value;
       };
-      setText('statVisits', Math.floor(1000 + Math.random() * 500));
-      setText('statContacts', Math.floor(50 + Math.random() * 80));
-      setText('statDaysActive', Math.floor(20 + Math.random() * 10));
+      const visits = Number(shop?.visitCount || 0);
+      const contacts = Number(shop?.contactCount || 0);
+      const daysActive = Number(shop?.daysActive || 1);
+      const daily = Array.isArray(shop?.dailyVisits) && shop.dailyVisits.length === 7
+        ? shop.dailyVisits
+        : [0, 0, 0, 0, 0, 0, 0];
+      setText('statVisits', visits.toLocaleString('fr-FR'));
+      setText('statContacts', contacts.toLocaleString('fr-FR'));
+      setText('statDaysActive', String(daysActive));
       setText('dashboardRentAmount', rentAmount.toLocaleString() + ' F');
       setText('dashboardRentDisplay', rentAmount.toLocaleString() + ' F');
-      initChart();
+      const visitDelta = daily[6] - daily[5];
+      const visitChange = document.querySelector('#statVisits')?.closest('.stat-card')?.querySelector('.stat-change');
+      if (visitChange) {
+        visitChange.className = 'stat-change ' + (visitDelta >= 0 ? 'up' : 'down');
+        visitChange.innerHTML = visitDelta === 0
+          ? 'Temps réel'
+          : `<i class="fas fa-arrow-${visitDelta >= 0 ? 'up' : 'down'}"></i> ${Math.abs(visitDelta)}`;
+      }
+      const contactChange = document.querySelector('#statContacts')?.closest('.stat-card')?.querySelector('.stat-change');
+      if (contactChange) {
+        contactChange.className = 'stat-change';
+        contactChange.textContent = 'Temps réel';
+      }
+      initChart(daily);
+      renderActivityList(shop?.recentActivity || []);
       updateReminderUI();
     }
 
-    function initChart() {
-      const ctx = document.getElementById('visitsChart').getContext('2d');
+    function formatActivityTime(iso) {
+      if (!iso) return '';
+      const ms = Date.now() - new Date(iso).getTime();
+      const min = Math.max(0, Math.floor(ms / 60000));
+      if (min < 1) return "À l'instant";
+      if (min < 60) return `Il y a ${min} min`;
+      const hours = Math.floor(min / 60);
+      if (hours < 24) return `Il y a ${hours} h`;
+      const days = Math.floor(hours / 24);
+      return days === 1 ? 'Il y a 1 jour' : `Il y a ${days} jours`;
+    }
+
+    function renderActivityList(items) {
+      const list = document.getElementById('activityList');
+      if (!list) return;
+      const rows = Array.isArray(items) ? items : [];
+      if (!rows.length) {
+        list.innerHTML = `
+            <li>
+              <span class="activity-icon visit"><i class="fas fa-info"></i></span>
+              <div class="activity-content">
+                <div class="activity-title">Pas encore d'activité</div>
+                <div class="activity-time">Les visites et contacts WhatsApp apparaîtront ici.</div>
+              </div>
+            </li>`;
+        return;
+      }
+      const icons = {
+        visit: 'fa-eye',
+        contact: 'fa-whatsapp',
+        payment: 'fa-check',
+        sponsor: 'fa-star'
+      };
+      list.innerHTML = rows.map(item => `
+            <li>
+              <span class="activity-icon ${item.type || 'visit'}"><i class="${item.type === 'contact' ? 'fab' : 'fas'} ${icons[item.type] || 'fa-eye'}"></i></span>
+              <div class="activity-content">
+                <div class="activity-title">${item.title || 'Activité'}</div>
+                <div class="activity-time">${formatActivityTime(item.at)}</div>
+              </div>
+            </li>`).join('');
+    }
+
+    function initChart(dailyVisits) {
+      const canvas = document.getElementById('visitsChart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
       if (visitsChart) visitsChart.destroy();
+      const data = Array.isArray(dailyVisits) && dailyVisits.length === 7
+        ? dailyVisits
+        : [0, 0, 0, 0, 0, 0, 0];
       visitsChart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
+          labels: (() => {
+            const names = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+            const today = new Date().getUTCDay();
+            return Array.from({ length: 7 }, (_, index) => names[(today - 6 + index + 7) % 7]);
+          })(),
           datasets: [{
             label: 'Visites',
-            data: [120, 150, 180, 200, 250, 300, 280],
+            data,
             borderColor: '#6C3CE1',
             backgroundColor: 'rgba(108,60,225,0.08)',
             fill: true,

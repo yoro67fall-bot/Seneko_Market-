@@ -9,7 +9,30 @@ export function getJwtSecret(): string {
 }
 
 export function getPublicApiUrl(): string {
-  return env("PUBLIC_API_URL", "http://127.0.0.1:8080").replace(/\/$/, "");
+  const configured = env("PUBLIC_API_URL").replace(/\/$/, "");
+  if (!configured) return "http://127.0.0.1:8080";
+  return /^https?:\/\//i.test(configured) ? configured : `https://${configured}`;
+}
+
+function isLocalHost(value: string): boolean {
+  return /localhost|127\.0\.0\.1/i.test(value);
+}
+
+export function resolvePublicBaseUrl(request?: {
+  protocol?: string;
+  get?(name: string): string | undefined;
+}): string {
+  const host = request?.get?.("x-forwarded-host") || request?.get?.("host") || "";
+  const proto = request?.get?.("x-forwarded-proto") || request?.protocol || "https";
+  const fromRequest = host ? `${proto}://${host}`.replace(/\/$/, "") : "";
+  const configured = env("PUBLIC_API_URL").replace(/\/$/, "");
+  const normalized = configured
+    ? (/^https?:\/\//i.test(configured) ? configured : `https://${configured}`)
+    : "";
+  if (normalized && !(isLocalHost(normalized) && host && !isLocalHost(host))) {
+    return normalized;
+  }
+  return fromRequest || normalized || "http://127.0.0.1:8080";
 }
 
 export function getUploadRoot(): string {

@@ -15,7 +15,7 @@ Netlify serves the static UI in `public/`.
 | --- | --- |
 | `DATABASE_URL` | From the Postgres plugin |
 | `JWT_SECRET` | Long random string |
-| `PUBLIC_API_URL` | Public Railway URL, e.g. `https://….up.railway.app` |
+| `PUBLIC_API_URL` | Must be the public Railway URL with `https://`, e.g. `https://senekomarket-production.up.railway.app`. Shop and product images break without this. |
 | `UPLOAD_ROOT` | `/data/uploads` |
 | `CORS_ORIGINS` | Netlify origin, e.g. `https://yoursite.netlify.app` |
 | `ALLOWED_REDIRECT_ORIGINS` | Same as CORS, plus any custom domain |

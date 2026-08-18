@@ -5,14 +5,14 @@ import { promisify } from "node:util";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
-import { getJwtSecret, getUploadRoot, isAllowedCorsOrigin } from "./config.js";
+import { getJwtSecret, getUploadRoot, isAllowedCorsOrigin, resolvePublicBaseUrl } from "./config.js";
 import { ApiError, parseInput, type AuthContext, type HandlerRequest } from "./errors.js";
 import { bootstrapAdmin, loginUser, registerUser, verifyToken } from "./auth.js";
 import { prisma } from "./prisma.js";
 import { getPlatformConfig, serializeProfileWithShop } from "./data.js";
 import { loginSchema, registerSchema } from "./schemas.js";
 import { isIdentityPath, resolveUploadFile, saveUpload } from "./uploads.js";
-import { bootstrapPublic, getPublicShop } from "./callables/catalog.js";
+import { bootstrapPublic, getPublicShop, recordShopEvent } from "./callables/catalog.js";
 import {
   completeMerchantProfile,
   deleteMyShop,
@@ -44,6 +44,7 @@ import { nabooPayWebhook } from "./http/webhook.js";
 const CALLABLES: Record<string, (request: HandlerRequest) => Promise<unknown>> = {
   bootstrapPublic,
   getPublicShop,
+  recordShopEvent,
   completeMerchantProfile,
   getMyAccount,
   updateMyShop,
@@ -81,11 +82,12 @@ const HTTP_STATUS: Record<string, number> = {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024 },
+  limits: { fileSize: 12 * 1024 * 1024 },
 });
 
 const app = express();
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
 app.use(
   cors({
     origin(origin, callback) {
@@ -178,6 +180,7 @@ app.post("/uploads", upload.single("file"), async (request, response, next) => {
       kind,
       uid: auth.uid,
       shopId: typeof request.body?.shopId === "string" ? request.body.shopId : undefined,
+      publicBaseUrl: resolvePublicBaseUrl(request),
     });
     response.json({ result: saved });
   } catch (error) {
@@ -223,6 +226,7 @@ app.post("/v1/:name", async (request: Request, response: Response, next) => {
     const result = await callable({
       data: request.body ?? {},
       auth: decodeAuth(request),
+      ip: request.ip || request.get("x-forwarded-for") || "",
     });
     response.json({ result });
   } catch (error) {
