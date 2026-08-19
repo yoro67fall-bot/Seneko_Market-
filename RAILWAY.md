@@ -54,3 +54,21 @@ Publish `public/`. `netlify.toml` already rewrites the SPA to `index.html`.
 After the Railway URL is known, include `public/api-config.json` in the Netlify publish folder (it is gitignored locally so you can set it in the Netlify UI or as a build file).
 
 The Railway `CORS_ORIGINS` value must include the Netlify site origin.
+
+### Netlify payment functions
+
+This project now exposes payment endpoints through Netlify Functions:
+
+- `/.netlify/functions/create-payment` (frontend -> function -> Railway payment callable)
+- `/.netlify/functions/naboopay-webhook` (NabooPay webhook -> function -> Railway webhook)
+
+Set this Netlify environment variable:
+
+- `RAILWAY_API_URL=https://senekomarket-production.up.railway.app`
+
+Webhook URL to register in NabooPay:
+
+- `https://fantastic-meringue-c930af.netlify.app/.netlify/functions/naboopay-webhook`
+
+Important: the webhook must be called by NabooPay with a valid `X-Signature`.
+A direct manual POST from Postman without signature will return `401 Invalid signature` by design.

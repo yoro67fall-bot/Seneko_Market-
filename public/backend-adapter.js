@@ -611,7 +611,7 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
   const selected = ui.getState().selectedPaymentMethod;
   const paymentMethod = selected === "visa" ? "card" : selected;
   const idempotencyKey = crypto.randomUUID();
-  const result = await backend("createPayment", {
+  const payload = {
     shopId: shop.backendId,
     purpose,
     sponsorOption,
@@ -622,7 +622,41 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
       : document.getElementById("phoneNumber").value.trim() || undefined,
     idempotencyKey,
     ...paymentUrls()
-  });
+  };
+  const auth = getToken();
+  const createPaymentViaFunction = async () => {
+    const response = await fetch("/.netlify/functions/create-payment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${auth}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const text = await response.text();
+    let parsed = {};
+    try {
+      parsed = text ? JSON.parse(text) : {};
+    } catch {
+      parsed = {};
+    }
+    if (!response.ok) {
+      const error = new Error(parsed?.error?.message || parsed?.error || "La requête de paiement a échoué.");
+      error.code = parsed?.error?.status || `http-${response.status}`;
+      throw error;
+    }
+    return parsed?.result || parsed;
+  };
+  let result;
+  try {
+    result = await createPaymentViaFunction();
+  } catch (error) {
+    if (!String(error?.code || "").startsWith("http-404")) {
+      throw error;
+    }
+    // Local and legacy fallback: call Railway callable directly.
+    result = await backend("createPayment", payload);
+  }
   localStorage.setItem("senekoPendingPayment", JSON.stringify({
     paymentId: result.paymentId,
     purpose,

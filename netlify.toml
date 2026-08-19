@@ -1,6 +1,9 @@
 [build]
   publish = "public"
 
+[functions]
+  directory = "netlify/functions"
+
 [[redirects]]
   from = "/api-config.json"
   to = "/api-config.json"
