@@ -84,17 +84,23 @@ model ShopEvent {
 }
 
 model Product {
-  id          String   @id @default(cuid())
-  shopId      String
-  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  ownerId     String
-  name        String
-  price       Int
-  description String
-  category    String?
-  images      String[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String    @id @default(cuid())
+  shopId           String
+  shop             Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  ownerId          String
+  name             String
+  price            Int
+  description      String
+  category         String?
+  images           String[]
+  approvalStatus   String    @default("pending")
+  rejectionReason  String?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([approvalStatus, createdAt])
 }
 
 model Payment {
@@ -176,6 +182,20 @@ model Banner {
   updatedBy String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+}
+
+model CategoryBanner {
+  id           String   @id @default(cuid())
+  categoryName String   @unique
+  description  String   @default("")
+  image        String?
+  link         String?
+  price        Int      @default(0)
+  active       Boolean  @default(true)
+  position     Int      @default(0)
+  updatedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model PlatformConfig {

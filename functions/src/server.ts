@@ -38,6 +38,11 @@ import {
   adminUpsertAgent,
   adminUpsertBanner,
   adminVerifyIdentity,
+  adminReviewSeller,
+  adminListProducts,
+  adminSetProductStatus,
+  adminUpsertCategoryBanner,
+  adminDeleteCategoryBanner,
 } from "./callables/admin.js";
 import { nabooPayWebhook } from "./http/webhook.js";
 
@@ -65,6 +70,11 @@ const CALLABLES: Record<string, (request: HandlerRequest) => Promise<unknown>> =
   adminUpsertBanner,
   adminDeleteBanner,
   adminSetPlatformBranding,
+  adminReviewSeller,
+  adminListProducts,
+  adminSetProductStatus,
+  adminUpsertCategoryBanner,
+  adminDeleteCategoryBanner,
 };
 
 const HTTP_STATUS: Record<string, number> = {

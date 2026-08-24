@@ -6,19 +6,27 @@ import {
   getPlatformConfig,
   isPublicShop,
   publicShop,
+  syncShopVisibility,
   toIso,
 } from "../data.js";
+import { toPublicAssetUrl } from "../uploads.js";
 
 export async function bootstrapPublic(request: HandlerRequest) {
   try {
     const input = parseInput(bootstrapPublicSchema, request.data);
     const now = new Date();
-    const [config, banners] = await Promise.all([
+    await syncShopVisibility(now);
+    const [config, banners, categoryBanners] = await Promise.all([
       getPlatformConfig(),
       prisma.banner.findMany({
         where: { active: true },
         orderBy: { position: "asc" },
         take: 50,
+      }),
+      prisma.categoryBanner.findMany({
+        where: { active: true },
+        orderBy: { position: "asc" },
+        take: 100,
       }),
     ]);
     const adBanners = banners
@@ -37,6 +45,17 @@ export async function bootstrapPublic(request: HandlerRequest) {
         startsAt: toIso(banner.startsAt),
         endsAt: toIso(banner.endsAt),
       }));
+
+    const categoryBannerFeed = categoryBanners.map((banner) => ({
+      id: banner.id,
+      categoryName: banner.categoryName,
+      description: banner.description,
+      image: banner.image ? toPublicAssetUrl(banner.image) : null,
+      link: banner.link,
+      price: banner.price,
+      active: banner.active,
+      position: banner.position,
+    }));
 
     const where = {
       deletedAt: null,
@@ -59,6 +78,7 @@ export async function bootstrapPublic(request: HandlerRequest) {
       config,
       shops: visible.map((shop) => publicShop(shop, shop.products, now)),
       adBanners,
+      categoryBanners: categoryBannerFeed,
       nextCursor:
         !input.shopId && shops.length === input.limit
           ? (shops.at(-1)?.id ?? null)
@@ -73,6 +93,7 @@ export async function getPublicShop(request: HandlerRequest) {
   try {
     const { shopId } = parseInput(publicShopSchema, request.data);
     const now = new Date();
+    await syncShopVisibility(now);
     const shop = await prisma.shop.findUnique({
       where: { id: shopId },
       include: { products: { orderBy: { createdAt: "desc" }, take: 200 } },

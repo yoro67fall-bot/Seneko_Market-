@@ -1,4 +1,4 @@
-import type { Agent, Banner, Shop, Sponsorship } from "@prisma/client";
+import type { Agent, Banner, CategoryBanner, Product, Shop, Sponsorship } from "@prisma/client";
 import {
   ApiError,
   asApiError,
@@ -12,9 +12,14 @@ import {
   adminBannerIdSchema,
   adminBannerSchema,
   adminBrandingSchema,
+  adminCategoryBannerIdSchema,
+  adminCategoryBannerSchema,
+  adminListProductsSchema,
   adminListSchema,
   adminMarkRentSchema,
+  adminProductStatusSchema,
   adminRentConfigSchema,
+  adminReviewSellerSchema,
   adminShopStatusSchema,
   adminVerifyIdentitySchema,
   emptySchema,
@@ -24,9 +29,11 @@ import {
   computeShopVisible,
   getPlatformConfig,
   getPrivateShopById,
+  merchantProduct,
   privateShop,
   toIso,
 } from "../data.js";
+import { toPublicAssetUrl } from "../uploads.js";
 
 function serializeAgent(agent: Agent): Record<string, unknown> {
   return {
@@ -54,6 +61,31 @@ function serializeBanner(banner: Banner): Record<string, unknown> {
     endsAt: toIso(banner.endsAt),
     createdAt: toIso(banner.createdAt),
     updatedAt: toIso(banner.updatedAt),
+  };
+}
+
+function serializeCategoryBanner(banner: CategoryBanner): Record<string, unknown> {
+  return {
+    id: banner.id,
+    categoryName: banner.categoryName,
+    description: banner.description,
+    image: banner.image ? toPublicAssetUrl(banner.image) : null,
+    link: banner.link,
+    price: banner.price,
+    active: banner.active,
+    position: banner.position,
+    createdAt: toIso(banner.createdAt),
+    updatedAt: toIso(banner.updatedAt),
+  };
+}
+
+function serializeAdminProduct(product: Product & { shop: Shop }): Record<string, unknown> {
+  return {
+    ...merchantProduct(product),
+    shopId: product.shopId,
+    shopName: product.shop.name,
+    shopCategory: product.shop.category,
+    ownerId: product.ownerId,
   };
 }
 
@@ -107,10 +139,11 @@ export async function adminBootstrap(request: HandlerRequest) {
   try {
     requireAdmin(request);
     parseInput(emptySchema, request.data);
-    const [config, agents, banners, sponsorings] = await Promise.all([
+    const [config, agents, banners, categoryBanners, sponsorings] = await Promise.all([
       getPlatformConfig(),
       prisma.agent.findMany({ orderBy: { name: "asc" }, take: 200 }),
       prisma.banner.findMany({ orderBy: { position: "asc" }, take: 200 }),
+      prisma.categoryBanner.findMany({ orderBy: { position: "asc" }, take: 200 }),
       prisma.sponsorship.findMany({
         orderBy: { createdAt: "desc" },
         take: 200,
@@ -120,6 +153,7 @@ export async function adminBootstrap(request: HandlerRequest) {
       config,
       agents: agents.map(serializeAgent),
       banners: banners.map(serializeBanner),
+      categoryBanners: categoryBanners.map(serializeCategoryBanner),
       sponsorings: sponsorings.map(serializeSponsorship),
     };
   } catch (error) {
@@ -342,6 +376,124 @@ export async function adminDeleteBanner(request: HandlerRequest) {
     requireAdmin(request);
     const { bannerId } = parseInput(adminBannerIdSchema, request.data);
     await prisma.banner.deleteMany({ where: { id: bannerId } });
+    return { deleted: true };
+  } catch (error) {
+    throw asApiError(error);
+  }
+}
+
+export async function adminReviewSeller(request: HandlerRequest) {
+  try {
+    const adminUid = requireAdmin(request);
+    const input = parseInput(adminReviewSellerSchema, request.data);
+    const shop = await requireShop(input.shopId);
+    const approved = input.decision === "approved";
+    const next: Shop = {
+      ...shop,
+      idVerified: approved,
+      approvalStatus: input.decision,
+      approved,
+    };
+    await prisma.shop.update({
+      where: { id: shop.id },
+      data: {
+        idVerified: approved,
+        approvalStatus: input.decision,
+        approved,
+        visible: approved ? computeShopVisible(next) : false,
+        identityVerifiedBy: adminUid,
+        identityVerifiedAt: new Date(),
+        lastModeratedBy: adminUid,
+        lastModeratedAt: new Date(),
+      },
+    });
+    return { shop: await getPrivateShopById(input.shopId) };
+  } catch (error) {
+    throw asApiError(error);
+  }
+}
+
+export async function adminListProducts(request: HandlerRequest) {
+  try {
+    requireAdmin(request);
+    const input = parseInput(adminListProductsSchema, request.data);
+    const products = await prisma.product.findMany({
+      where: input.status ? { approvalStatus: input.status } : undefined,
+      include: { shop: true },
+      orderBy: { createdAt: "desc" },
+      take: input.limit,
+      ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
+    });
+    return {
+      products: products.map(serializeAdminProduct),
+      nextCursor:
+        products.length === input.limit ? (products.at(-1)?.id ?? null) : null,
+    };
+  } catch (error) {
+    throw asApiError(error);
+  }
+}
+
+export async function adminSetProductStatus(request: HandlerRequest) {
+  try {
+    const adminUid = requireAdmin(request);
+    const input = parseInput(adminProductStatusSchema, request.data);
+    const product = await prisma.product.findUnique({
+      where: { id: input.productId },
+      include: { shop: true },
+    });
+    if (!product) {
+      throw new ApiError("not-found", "Product not found.");
+    }
+    const updated = await prisma.product.update({
+      where: { id: product.id },
+      data: {
+        approvalStatus: input.decision,
+        rejectionReason:
+          input.decision === "rejected" ? (input.rejectionReason ?? null) : null,
+        reviewedBy: adminUid,
+        reviewedAt: new Date(),
+      },
+      include: { shop: true },
+    });
+    return { product: serializeAdminProduct(updated) };
+  } catch (error) {
+    throw asApiError(error);
+  }
+}
+
+export async function adminUpsertCategoryBanner(request: HandlerRequest) {
+  try {
+    const adminUid = requireAdmin(request);
+    const input = parseInput(adminCategoryBannerSchema, request.data);
+    const data = {
+      categoryName: input.categoryName,
+      description: input.description,
+      image: input.image ?? null,
+      link: input.link ?? null,
+      price: input.price,
+      active: input.active,
+      position: input.position,
+      updatedBy: adminUid,
+    };
+    const banner = input.bannerId
+      ? await prisma.categoryBanner.update({ where: { id: input.bannerId }, data })
+      : await prisma.categoryBanner.upsert({
+          where: { categoryName: input.categoryName },
+          create: data,
+          update: data,
+        });
+    return { banner: serializeCategoryBanner(banner) };
+  } catch (error) {
+    throw asApiError(error);
+  }
+}
+
+export async function adminDeleteCategoryBanner(request: HandlerRequest) {
+  try {
+    requireAdmin(request);
+    const { bannerId } = parseInput(adminCategoryBannerIdSchema, request.data);
+    await prisma.categoryBanner.deleteMany({ where: { id: bannerId } });
     return { deleted: true };
   } catch (error) {
     throw asApiError(error);

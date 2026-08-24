@@ -314,6 +314,65 @@ export const adminBrandingSchema = z
   .object({ platformLogo: optionalUrl })
   .strict();
 
+export const adminListProductsSchema = z
+  .object({
+    status: z.enum(["pending", "approved", "rejected"]).optional(),
+    limit: z.number().int().min(1).max(250).default(50),
+    cursor: z.string().trim().min(1).max(128).optional(),
+  })
+  .strict();
+
+export const adminProductStatusSchema = z
+  .object({
+    productId: z.string().trim().min(1).max(128),
+    decision: z.enum(["approved", "rejected"]),
+    rejectionReason: trimmed(1, 500).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.decision === "rejected" && !value.rejectionReason) {
+      context.addIssue({
+        code: "custom",
+        path: ["rejectionReason"],
+        message: "A rejection reason is required.",
+      });
+    }
+  });
+
+export const adminCategoryBannerSchema = z
+  .object({
+    bannerId: z.string().trim().min(1).max(128).optional(),
+    categoryName: trimmed(1, 120),
+    description: z.string().trim().max(500).default(""),
+    image: optionalUrl,
+    link: optionalUrl,
+    price: z.number().int().min(0).max(100_000_000).default(0),
+    active: z.boolean().default(true),
+    position: z.number().int().min(0).max(10_000).default(0),
+  })
+  .strict();
+
+export const adminCategoryBannerIdSchema = z
+  .object({ bannerId: z.string().trim().min(1).max(128) })
+  .strict();
+
+export const adminReviewSellerSchema = z
+  .object({
+    shopId: z.string().trim().min(1).max(128),
+    decision: z.enum(["approved", "rejected"]),
+    rejectionReason: trimmed(1, 500).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.decision === "rejected" && !value.rejectionReason) {
+      context.addIssue({
+        code: "custom",
+        path: ["rejectionReason"],
+        message: "A rejection reason is required.",
+      });
+    }
+  });
+
 export function validateIdentityPath(uid: string, path: string): boolean {
   const expectedPrefix = `identity/${uid}/`;
   return (

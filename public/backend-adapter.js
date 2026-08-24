@@ -3,6 +3,8 @@ const clientIds = new Map();
 const TOKEN_KEY = "senekoJwt";
 let services = null;
 let publicSnapshot = [];
+let categoryBannersSnapshot = [];
+let pendingProductsSnapshot = [];
 let paymentReturnHandled = false;
 
 function toast(type, title, message) {
@@ -185,28 +187,47 @@ function formatXof(value) {
 function normalizeProduct(product, shopBackendId) {
   const backendId = String(product.id || product.productId || stableClientId(JSON.stringify(product)));
   const priceAmount = Number(product.priceAmount ?? product.price ?? 0);
+  const approvalStatus = product.approvalStatus
+    || (product.approved === true ? "approved" : product.approved === false ? (product.rejectionReason ? "rejected" : "pending") : "approved");
   return {
     ...product,
     backendId,
     id: stableClientId(`product:${shopBackendId}:${backendId}`),
     priceAmount: Number.isInteger(priceAmount) ? priceAmount : 0,
     price: formatXof(priceAmount),
-    images: Array.isArray(product.images) ? product.images : []
+    images: Array.isArray(product.images) ? product.images : [],
+    approvalStatus,
+    approved: approvalStatus === "approved",
+    rejectionReason: product.rejectionReason || null
   };
 }
 
 function normalizeShop(shop) {
   const backendId = String(shop.id || shop.shopId);
+  const idCardPath = shop.idCardPath || shop.idCard || "";
+  let idCardUrl = null;
+  if (idCardPath && services?.apiUrl) {
+    const parts = String(idCardPath).split("/");
+    if (parts.length >= 3 && parts[0] === "identity") {
+      idCardUrl = `${services.apiUrl}/uploads/identity/${parts[1]}/${parts[2]}`;
+    }
+  }
   return {
     ...shop,
     backendId,
     id: stableClientId(`shop:${backendId}`),
+    idCardPath,
+    idCardUrl,
+    idCard: idCardUrl,
+    ownerEmail: shop.ownerEmail || shop.email || null,
+    ownerUid: shop.ownerUid || shop.ownerId || null,
     products: Array.isArray(shop.products)
       ? shop.products.map(product => normalizeProduct(product, backendId))
       : [],
     rentPaid: shop.rentPaid === true,
     approved: shop.approved === true,
     visible: shop.visible === true,
+    idVerified: shop.idVerified === true,
     sponsored: shop.sponsored === true,
     visitCount: Number(shop.visitCount || 0),
     contactCount: Number(shop.contactCount || 0),
@@ -238,6 +259,21 @@ function normalizeBanner(banner) {
   };
 }
 
+function normalizeCategoryBanner(banner) {
+  const backendId = String(banner.id || banner.bannerId);
+  return {
+    ...banner,
+    backendId,
+    id: stableClientId(`category-banner:${backendId}`)
+  };
+}
+
+function normalizeAdminProduct(product) {
+  const backendId = String(product.id || product.productId);
+  const shopBackendId = String(product.shopId || "unknown");
+  return normalizeProduct({ ...product, id: backendId }, shopBackendId);
+}
+
 function applyPublicShops(extraShop = null) {
   const shops = [...publicSnapshot];
   if (extraShop && !shops.some(shop => shop.backendId === extraShop.backendId)) shops.push(extraShop);
@@ -248,11 +284,15 @@ function applyPublicShops(extraShop = null) {
 async function loadPublicData() {
   const data = await backend("bootstrapPublic", { limit: 100 });
   publicSnapshot = (data?.shops || []).map(normalizeShop);
+  categoryBannersSnapshot = (data?.categoryBanners || []).map(normalizeCategoryBanner);
   ui.setConfig({
     ...(data?.config || {}),
     platformLogo: data?.platformLogo ?? data?.config?.platformLogo
   });
-  ui.setAdminData({ adBanners: (data?.adBanners || []).map(normalizeBanner) });
+  ui.setAdminData({
+    adBanners: (data?.adBanners || []).map(normalizeBanner),
+    categoryBanners: categoryBannersSnapshot
+  });
   applyPublicShops();
 }
 
@@ -294,8 +334,12 @@ async function loadAccount({ navigate = false } = {}) {
     ui.setAdminData({
       agents: (adminData?.agents || []).map(normalizeAgent),
       adBanners: (adminData?.adBanners || adminData?.banners || []).map(normalizeBanner),
+      categoryBanners: (adminData?.categoryBanners || []).map(normalizeCategoryBanner),
       sponsorings: adminData?.sponsorings || []
     });
+    const pendingProducts = await backend("adminListProducts", { status: "pending", limit: 100 });
+    pendingProductsSnapshot = (pendingProducts?.products || []).map(normalizeAdminProduct);
+    ui.setAdminData({ pendingProducts: pendingProductsSnapshot });
     ui.renderPublic();
     ui.renderAdmin();
     if (navigate) ui.showPage("admin");
@@ -317,9 +361,14 @@ function currentShop() {
   const state = ui.getState();
   const user = state.currentUser;
   if (!user) return null;
+  if (state.activeShopId != null) {
+    const active = state.shops.find(shop => Number(shop.id) === Number(state.activeShopId));
+    if (active) return active;
+  }
   return state.shops.find(shop =>
     (user.shopId && shop.backendId === user.shopId) ||
     (user.uid && shop.ownerUid === user.uid) ||
+    (user.email && (shop.ownerEmail === user.email || shop.email === user.email)) ||
     (user.shopName && shop.name === user.shopName)
   ) || null;
 }
@@ -451,14 +500,15 @@ window.handleLogin = () => runAction(async () => {
 window.handleRegister = () => runAction(async () => {
   const firstname = document.getElementById("registerFirstname").value.trim();
   const lastname = document.getElementById("registerLastname").value.trim();
-  const shopName = document.getElementById("registerShopName").value.trim();
+  const shopNameInput = document.getElementById("registerShopName");
+  const shopName = (shopNameInput?.value || `${firstname} ${lastname}`).trim();
   const email = document.getElementById("registerEmail").value.trim();
   const phone = document.getElementById("registerPhone").value.trim();
   const password = document.getElementById("registerPassword").value;
   const confirmPassword = document.getElementById("registerConfirm").value;
   const category = document.getElementById("registerCategory").value;
-  const openingFor = document.getElementById("registerOpeningFor").value;
-  const agentCode = document.getElementById("registerAgentCode").value.trim();
+  const openingFor = document.getElementById("registerOpeningFor")?.value || "myself";
+  const agentCode = document.getElementById("registerAgentCode")?.value?.trim() || "";
   const idFile = document.getElementById("registerIdCard").files[0];
   const termsAccepted = document.querySelector("#form-register .form-options input[type=checkbox]")?.checked;
 
@@ -467,6 +517,9 @@ window.handleRegister = () => runAction(async () => {
   }
   if (!idFile) throw new Error("Veuillez charger votre pièce d'identité.");
   if (!termsAccepted) throw new Error("Vous devez accepter les conditions d'utilisation.");
+  if (typeof window.isPasswordValid === "function" && !window.isPasswordValid(password)) {
+    throw new Error("Le mot de passe doit contenir 8 caractères, une majuscule et un caractère spécial.");
+  }
 
   if (!getToken()) {
     if (!password || password !== confirmPassword) {
@@ -579,7 +632,10 @@ window.addProduct = () => runAction(async () => {
   });
   ui.resetProductEditor();
   await refreshCurrentData();
-  toast("success", editingProduct ? "✅ Produit modifié" : "✅ Produit ajouté", `"${name}" a été enregistré.`);
+  toast("success", editingProduct ? "✅ Produit modifié" : "✅ Produit ajouté",
+    editingProduct
+      ? `"${name}" a été mis à jour et sera revu par l'administrateur.`
+      : `"${name}" est en attente de validation par l'administrateur.`);
 }, "Produit non enregistré");
 
 window.deleteProduct = productId => runAction(async () => {
@@ -783,10 +839,160 @@ window.markRentUnpaid = shopId => runAction(async () => {
 window.verifyId = (shopId, verified) => runAction(async () => {
   const shop = shopByClientId(shopId);
   if (!shop) throw new Error("Boutique introuvable.");
-  await backend("adminVerifyIdentity", { shopId: shop.backendId, verified: Boolean(verified) });
+  if (verified) {
+    await backend("adminReviewSeller", { shopId: shop.backendId, decision: "approved" });
+  } else {
+    const reason = prompt("Motif du rejet (obligatoire) :");
+    if (!reason || !reason.trim()) throw new Error("Un motif de rejet est requis.");
+    await backend("adminReviewSeller", {
+      shopId: shop.backendId,
+      decision: "rejected",
+      rejectionReason: reason.trim()
+    });
+  }
   await refreshCurrentData();
   toast("success", "Identité mise à jour", `La vérification de "${shop.name}" a été enregistrée.`);
 }, "Vérification impossible");
+
+window.approveProduct = (productId, shopId) => runAction(async () => {
+  const product = productByClientId(productId, shopId);
+  if (!product) throw new Error("Produit introuvable.");
+  await backend("adminSetProductStatus", { productId: product.backendId, decision: "approved" });
+  await refreshCurrentData();
+  toast("success", "✅ Produit validé", `"${product.name}" est maintenant visible.`);
+}, "Validation impossible");
+
+window.rejectProduct = (productId, shopId) => runAction(async () => {
+  const product = productByClientId(productId, shopId);
+  if (!product) throw new Error("Produit introuvable.");
+  const reason = prompt("Motif du rejet (obligatoire) :");
+  if (!reason || !reason.trim()) throw new Error("Un motif de rejet est requis.");
+  await backend("adminSetProductStatus", {
+    productId: product.backendId,
+    decision: "rejected",
+    rejectionReason: reason.trim()
+  });
+  await refreshCurrentData();
+  toast("info", "Produit rejeté", `"${product.name}" a été refusé.`);
+}, "Rejet impossible");
+
+window.addCategorySponsor = () => runAction(async () => {
+  const categoryName = document.getElementById("sponsorCategorySelect")?.value?.trim();
+  const title = document.getElementById("sponsorBannerTitle")?.value?.trim() || "";
+  const description = document.getElementById("sponsorBannerDesc")?.value?.trim() || title;
+  const price = Number(document.getElementById("sponsorBannerPrice")?.value || 0);
+  const input = document.getElementById("sponsorBannerImageInput");
+  const file = input?.files?.[0];
+  if (!categoryName || !description) throw new Error("Veuillez remplir tous les champs.");
+  if (!file) throw new Error("Veuillez charger une image.");
+  const image = await uploadPublicFile(file, "banner");
+  await backend("adminUpsertCategoryBanner", {
+    categoryName,
+    description: title ? `${title} — ${description}` : description,
+    price: Number.isInteger(price) ? price : 0,
+    image,
+    active: true
+  });
+  if (input) input.value = "";
+  const titleEl = document.getElementById("sponsorBannerTitle");
+  const descEl = document.getElementById("sponsorBannerDesc");
+  const priceEl = document.getElementById("sponsorBannerPrice");
+  if (titleEl) titleEl.value = "";
+  if (descEl) descEl.value = "";
+  if (priceEl) priceEl.value = "5000";
+  await refreshCurrentData();
+  toast("success", "✅ Bannière ajoutée", `La bannière pour "${categoryName}" a été enregistrée.`);
+}, "Bannière non enregistrée");
+
+window.toggleCategorySponsor = sponsorId => runAction(async () => {
+  const banner = categoryBannerByClientId(sponsorId);
+  if (!banner) throw new Error("Bannière introuvable.");
+  await backend("adminUpsertCategoryBanner", {
+    bannerId: banner.backendId,
+    categoryName: banner.categoryName || banner.category,
+    description: banner.description || "",
+    image: banner.image || undefined,
+    price: Number(banner.price || 0),
+    active: banner.active === false
+  });
+  await refreshCurrentData();
+  toast("success", "Bannière mise à jour", `La bannière est maintenant ${banner.active === false ? "active" : "inactive"}.`);
+}, "Mise à jour impossible");
+
+window.deleteCategorySponsor = sponsorId => runAction(async () => {
+  if (!confirm("Voulez-vous vraiment supprimer cette bannière ?")) return;
+  const banner = categoryBannerByClientId(sponsorId);
+  if (!banner) throw new Error("Bannière introuvable.");
+  await backend("adminDeleteCategoryBanner", { bannerId: banner.backendId });
+  await refreshCurrentData();
+  toast("success", "🗑️ Bannière supprimée", "La bannière a été supprimée.");
+}, "Suppression impossible");
+
+window.createNewShop = () => runAction(async () => {
+  const existing = currentShop();
+  if (existing) {
+    throw new Error("Une seule boutique est autorisée par compte. Modifiez votre boutique actuelle depuis « Gérer ma boutique ».");
+  }
+  const name = document.getElementById("newShopName")?.value?.trim();
+  const category = document.getElementById("newShopCategory")?.value;
+  const description = document.getElementById("newShopDescription")?.value?.trim();
+  const phone = document.getElementById("newShopPhone")?.value?.trim();
+  const email = document.getElementById("newShopEmail")?.value?.trim();
+  const user = ui.getState().currentUser;
+  if (!name || !category || !description || !phone) {
+    throw new Error("Veuillez remplir tous les champs obligatoires.");
+  }
+  if (!user) throw new Error("Vous devez être connecté.");
+  throw new Error("Pour créer une boutique, utilisez l'inscription avec pièce d'identité, ou contactez l'administrateur.");
+}, "Création impossible");
+
+window.saveCategoryBanner = window.addCategorySponsor;
+window.removeCategoryBanner = window.deleteCategorySponsor;
+
+function productByClientId(clientId, shopClientId) {
+  if (shopClientId != null) {
+    const shop = shopByClientId(shopClientId);
+    const fromShop = shop?.products?.find(product => Number(product.id) === Number(clientId));
+    if (fromShop) return fromShop;
+  }
+  return pendingProductsSnapshot.find(product => Number(product.id) === Number(clientId))
+    || ui.getState().shops.flatMap(shop => shop.products || []).find(product => Number(product.id) === Number(clientId));
+}
+
+function categoryBannerByClientId(clientId) {
+  const fromState = (ui.getState().categorySponsors || ui.getState().categoryBanners || [])
+    .find(banner => Number(banner.id) === Number(clientId));
+  return fromState
+    || categoryBannersSnapshot.find(banner => Number(banner.id) === Number(clientId));
+}
+
+async function fetchIdentityBlobUrl(idCardUrl) {
+  if (!idCardUrl) return null;
+  const response = await fetch(idCardUrl, {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+  if (!response.ok) return null;
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+window.loadIdentityPreviews = async () => {
+  const previews = document.querySelectorAll("[data-id-card-url]");
+  await Promise.all(Array.from(previews).map(async node => {
+    const url = node.getAttribute("data-id-card-url");
+    if (!url) return;
+    const blobUrl = await fetchIdentityBlobUrl(url);
+    if (!blobUrl) {
+      if (!node.querySelector("img")) node.textContent = "📄 Aperçu indisponible";
+      return;
+    }
+    if (node.tagName === "IMG") {
+      node.src = blobUrl;
+      return;
+    }
+    node.innerHTML = `<img src="${blobUrl}" alt="Pièce d'identité" style="max-width:100%;max-height:180px;border-radius:8px;">`;
+  }));
+};
 
 window.saveRentConfig = () => runAction(async () => {
   const rentAmount = Number(document.getElementById("rentAmountInput").value);

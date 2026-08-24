@@ -82,6 +82,28 @@ export function isPublicShop(shop: Shop, now = new Date()): boolean {
   return !shop.deletedAt && computeShopVisible(shop, now);
 }
 
+export function isApprovedProduct(
+  product: Pick<Product, "approvalStatus">,
+): boolean {
+  return product.approvalStatus === "approved";
+}
+
+export async function syncShopVisibility(now = new Date()): Promise<void> {
+  const shops = await prisma.shop.findMany({ where: { deletedAt: null } });
+  await Promise.all(
+    shops.map(async (shop) => {
+      const rentStillValid = isRentCurrentlyPaid(shop, now);
+      const shouldBeVisible = computeShopVisible(shop, now);
+      const data: { visible?: boolean; rentPaid?: boolean } = {};
+      if (shop.visible !== shouldBeVisible) data.visible = shouldBeVisible;
+      if (shop.rentPaid && !rentStillValid) data.rentPaid = false;
+      if (Object.keys(data).length > 0) {
+        await prisma.shop.update({ where: { id: shop.id }, data });
+      }
+    }),
+  );
+}
+
 function isActiveThrough(value: Date | null, now = new Date()): boolean {
   return value !== null && value.valueOf() > now.valueOf();
 }
@@ -99,12 +121,22 @@ export function publicProduct(product: Product): Record<string, unknown> {
   };
 }
 
+export function merchantProduct(product: Product): Record<string, unknown> {
+  return {
+    ...publicProduct(product),
+    approvalStatus: product.approvalStatus,
+    rejectionReason: product.rejectionReason,
+    reviewedAt: toIso(product.reviewedAt),
+  };
+}
+
 export function publicShop(
   shop: Shop,
   products: Product[],
   now = new Date(),
 ): Record<string, unknown> {
   const sponsored = shop.sponsored && isActiveThrough(shop.sponsorEndDate, now);
+  const visibleProducts = products.filter(isApprovedProduct);
   return {
     id: shop.id,
     name: shop.name,
@@ -124,7 +156,7 @@ export function publicShop(
     sponsorEndDate: sponsored ? toIso(shop.sponsorEndDate) : null,
     lastPayment: toIso(shop.lastPayment),
     bannerImage: sponsored ? (shop.bannerImage ? toPublicAssetUrl(shop.bannerImage) : shop.bannerImage) : null,
-    products: products.map(publicProduct),
+    products: visibleProducts.map(publicProduct),
   };
 }
 
@@ -133,7 +165,7 @@ export function privateShop(
   products: Product[],
 ): Record<string, unknown> {
   return {
-    ...publicShop(shop, products),
+    ...publicShop(shop, products.filter(isApprovedProduct)),
     ownerUid: shop.ownerId,
     adminVisible: shop.adminVisible,
     approvalStatus: shop.approvalStatus,
@@ -144,6 +176,7 @@ export function privateShop(
     deletedAt: toIso(shop.deletedAt),
     createdAt: toIso(shop.createdAt),
     updatedAt: toIso(shop.updatedAt),
+    products: products.map(merchantProduct),
   };
 }
 

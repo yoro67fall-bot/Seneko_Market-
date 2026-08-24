@@ -12,10 +12,11 @@ import { prisma } from "../prisma.js";
 import {
   assertShopOwner,
   getPrivateShopById,
+  merchantProduct,
   normalizeShopName,
   normalizeWhatsApp,
-  publicProduct,
   serializeProfileWithShop,
+  syncShopVisibility,
 } from "../data.js";
 import { toPublicAssetUrl } from "../uploads.js";
 
@@ -113,6 +114,7 @@ export async function getMyAccount(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
     parseInput(emptySchema, request.data);
+    await syncShopVisibility();
     const shop = await prisma.shop.findUnique({ where: { ownerId: auth.uid } });
     return {
       profile: await serializeProfileWithShop(auth.uid, shop),
@@ -209,6 +211,10 @@ export async function upsertProduct(request: HandlerRequest) {
           description: input.description,
           category: input.category ?? shop.category,
           images,
+          approvalStatus: "pending",
+          rejectionReason: null,
+          reviewedBy: null,
+          reviewedAt: null,
         },
       });
     } else {
@@ -221,11 +227,12 @@ export async function upsertProduct(request: HandlerRequest) {
           description: input.description,
           category: input.category ?? shop.category,
           images,
+          approvalStatus: "pending",
         },
       });
     }
     await prisma.shop.update({ where: { id: shop.id }, data: { updatedAt: new Date() } });
-    return { product: publicProduct(product) };
+    return { product: merchantProduct(product) };
   } catch (error) {
     throw asApiError(error);
   }
