@@ -174,6 +174,7 @@ export const createPaymentSchema = z
     payerPhone: phone.optional(),
     sponsorOption: sponsorOptionSchema.optional(),
     bannerImages: z.array(assetUrl).max(5).default([]),
+    demoMode: z.boolean().optional().default(false),
     returnUrl: redirectUrl.optional(),
     cancelUrl: redirectUrl.optional(),
     idempotencyKey: z
@@ -204,6 +205,13 @@ export const createPaymentSchema = z
         code: "custom",
         path: ["bannerImages"],
         message: "At least one sponsorship banner is required",
+      });
+    }
+    if (value.demoMode && value.purpose !== "rent") {
+      context.addIssue({
+        code: "custom",
+        path: ["demoMode"],
+        message: "demoMode is only valid for rent payments",
       });
     }
   });

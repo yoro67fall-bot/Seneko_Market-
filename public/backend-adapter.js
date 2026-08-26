@@ -677,6 +677,7 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
       ? undefined
       : document.getElementById("phoneNumber").value.trim() || undefined,
     idempotencyKey,
+    demoMode: purpose === "rent" && ui.getState().isDemoMode === true,
     ...paymentUrls()
   };
   const auth = getToken();

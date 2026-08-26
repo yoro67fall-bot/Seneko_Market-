@@ -11,6 +11,7 @@ import {
   submitSponsorshipSchema,
 } from "../schemas.js";
 import {
+  env,
   getAllowedRedirectOrigins,
   getNabooPayDefaultCancelUrl,
   getNabooPayDefaultReturnUrl,
@@ -91,9 +92,15 @@ export async function createPayment(request: HandlerRequest) {
       prisma.user.findUnique({ where: { id: auth.uid } }),
     ]);
     const profile = serializeProfile(user);
+    const demoRentAmount = (() => {
+      const raw = Number(env("DEMO_RENT_AMOUNT", "10"));
+      return Number.isInteger(raw) && raw >= 10 ? raw : 10;
+    })();
     const amount =
       input.purpose === "rent"
-        ? config.rentAmount
+        ? input.demoMode
+          ? demoRentAmount
+          : config.rentAmount
         : config.sponsorPrices[input.sponsorOption as SponsorOption];
     const durationDays =
       input.purpose === "sponsor"
@@ -199,9 +206,11 @@ export async function createPayment(request: HandlerRequest) {
           : ["wave", "orange_money"],
       productName:
         input.purpose === "rent"
-          ? "Loyer Seneko Market"
+          ? input.demoMode
+            ? `Loyer Seneko Market (Démo ${amount} F)`
+            : "Loyer Seneko Market"
           : `Sponsoring Seneko Market (${input.sponsorOption})`,
-      productDescription: `${input.purpose}:${payment.id}:${input.shopId}`,
+      productDescription: `${input.purpose}:${payment.id}:${input.shopId}${input.demoMode ? ":demo" : ""}`,
       amount,
       firstName:
         typeof profile?.firstname === "string" && profile.firstname
