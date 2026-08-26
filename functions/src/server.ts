@@ -6,6 +6,7 @@ import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import { getJwtSecret, getUploadRoot, isAllowedCorsOrigin, resolvePublicBaseUrl } from "./config.js";
+import { parsePlatformCountry } from "./country.js";
 import { ApiError, parseInput, type AuthContext, type HandlerRequest } from "./errors.js";
 import { bootstrapAdmin, loginUser, registerUser, verifyToken } from "./auth.js";
 import { prisma } from "./prisma.js";
@@ -44,7 +45,7 @@ import {
   adminUpsertCategoryBanner,
   adminDeleteCategoryBanner,
 } from "./callables/admin.js";
-import { nabooPayWebhook } from "./http/webhook.js";
+import { nabooPayWebhook, senePayWebhook } from "./http/webhook.js";
 
 const CALLABLES: Record<string, (request: HandlerRequest) => Promise<unknown>> = {
   bootstrapPublic,
@@ -107,6 +108,7 @@ app.use(
   }),
 );
 app.use("/webhooks/naboopay", express.raw({ type: "*/*" }));
+app.use("/webhooks/senepay", express.raw({ type: "*/*" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(
   "/uploads/public",
@@ -125,10 +127,15 @@ app.post("/webhooks/naboopay", (request, response) => {
   void nabooPayWebhook(request, response);
 });
 
+app.post("/webhooks/senepay", (request, response) => {
+  void senePayWebhook(request, response);
+});
+
 app.post("/auth/register", async (request, response, next) => {
   try {
+    const countryCode = countryFromRequest(request);
     const input = parseInput(registerSchema, request.body);
-    const result = await registerUser(input);
+    const result = await registerUser(input, countryCode);
     response.json({ result });
   } catch (error) {
     next(error);
@@ -137,8 +144,9 @@ app.post("/auth/register", async (request, response, next) => {
 
 app.post("/auth/login", async (request, response, next) => {
   try {
+    const countryCode = countryFromRequest(request);
     const input = parseInput(loginSchema, request.body);
-    const result = await loginUser(input.email, input.password);
+    const result = await loginUser(input.email, input.password, countryCode);
     response.json({ result });
   } catch (error) {
     next(error);
@@ -237,12 +245,19 @@ app.post("/v1/:name", async (request: Request, response: Response, next) => {
       data: request.body ?? {},
       auth: decodeAuth(request),
       ip: request.ip || request.get("x-forwarded-for") || "",
+      countryCode: countryFromRequest(request),
     });
     response.json({ result });
   } catch (error) {
     next(error);
   }
 });
+
+function countryFromRequest(request: Request) {
+  return parsePlatformCountry(
+    request.get("x-platform-country") || request.get("X-Platform-Country"),
+  );
+}
 
 function decodeAuth(request: Request): AuthContext | undefined {
   const header = request.get("authorization") ?? "";
@@ -326,7 +341,7 @@ async function start(): Promise<void> {
   await ensureUploadRoot();
   try {
     await runMigrations();
-    await getPlatformConfig();
+    await getPlatformConfig("SN");
     console.log("boot: platform config ready");
     await bootstrapAdmin();
     console.log("boot: admin ready");

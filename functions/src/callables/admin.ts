@@ -4,6 +4,7 @@ import {
   asApiError,
   parseInput,
   requireAdmin,
+  requireCountry,
   type HandlerRequest,
 } from "../errors.js";
 import {
@@ -33,6 +34,7 @@ import {
   privateShop,
   toIso,
 } from "../data.js";
+import { COUNTRY_CURRENCY } from "../country.js";
 import { toPublicAssetUrl } from "../uploads.js";
 
 function serializeAgent(agent: Agent): Record<string, unknown> {
@@ -108,9 +110,9 @@ function serializeSponsorship(row: Sponsorship): Record<string, unknown> {
   };
 }
 
-async function requireShop(shopId: string): Promise<Shop> {
+async function requireShop(shopId: string, countryCode: string): Promise<Shop> {
   const shop = await prisma.shop.findUnique({ where: { id: shopId } });
-  if (!shop || shop.deletedAt) {
+  if (!shop || shop.deletedAt || shop.countryCode !== countryCode) {
     throw new ApiError("not-found", "Shop not found.");
   }
   return shop;
@@ -119,8 +121,10 @@ async function requireShop(shopId: string): Promise<Shop> {
 export async function adminListShops(request: HandlerRequest) {
   try {
     requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminListSchema, request.data);
     const shops = await prisma.shop.findMany({
+      where: { countryCode },
       include: { products: { orderBy: { createdAt: "desc" }, take: 200 } },
       orderBy: { id: "asc" },
       take: input.limit,
@@ -138,13 +142,27 @@ export async function adminListShops(request: HandlerRequest) {
 export async function adminBootstrap(request: HandlerRequest) {
   try {
     requireAdmin(request);
+    const countryCode = requireCountry(request);
     parseInput(emptySchema, request.data);
     const [config, agents, banners, categoryBanners, sponsorings] = await Promise.all([
-      getPlatformConfig(),
-      prisma.agent.findMany({ orderBy: { name: "asc" }, take: 200 }),
-      prisma.banner.findMany({ orderBy: { position: "asc" }, take: 200 }),
-      prisma.categoryBanner.findMany({ orderBy: { position: "asc" }, take: 200 }),
+      getPlatformConfig(countryCode),
+      prisma.agent.findMany({
+        where: { countryCode },
+        orderBy: { name: "asc" },
+        take: 200,
+      }),
+      prisma.banner.findMany({
+        where: { countryCode },
+        orderBy: { position: "asc" },
+        take: 200,
+      }),
+      prisma.categoryBanner.findMany({
+        where: { countryCode },
+        orderBy: { position: "asc" },
+        take: 200,
+      }),
       prisma.sponsorship.findMany({
+        where: { shop: { countryCode } },
         orderBy: { createdAt: "desc" },
         take: 200,
       }),
@@ -164,8 +182,9 @@ export async function adminBootstrap(request: HandlerRequest) {
 export async function adminSetShopStatus(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminShopStatusSchema, request.data);
-    const shop = await requireShop(input.shopId);
+    const shop = await requireShop(input.shopId, countryCode);
     const next: Shop = { ...shop };
     if (input.decision) {
       next.approvalStatus = input.decision;
@@ -214,11 +233,15 @@ export async function adminSetShopStatus(request: HandlerRequest) {
 export async function adminSetRentConfig(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminRentConfigSchema, request.data);
+    const currency = COUNTRY_CURRENCY[countryCode];
     await prisma.platformConfig.upsert({
-      where: { id: "config" },
+      where: { id: countryCode },
       create: {
-        id: "config",
+        id: countryCode,
+        countryCode,
+        currency,
         rentAmount: input.rentAmount,
         rentDurationDays: input.rentDurationDays,
         sponsorPrice7: input.sponsorPrices?.["7days"],
@@ -241,7 +264,7 @@ export async function adminSetRentConfig(request: HandlerRequest) {
         updatedBy: adminUid,
       },
     });
-    return { config: await getPlatformConfig() };
+    return { config: await getPlatformConfig(countryCode) };
   } catch (error) {
     throw asApiError(error);
   }
@@ -250,10 +273,11 @@ export async function adminSetRentConfig(request: HandlerRequest) {
 export async function adminMarkRent(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminMarkRentSchema, request.data);
     const [config, shop] = await Promise.all([
-      getPlatformConfig(),
-      requireShop(input.shopId),
+      getPlatformConfig(countryCode),
+      requireShop(input.shopId, countryCode),
     ]);
     const paidUntil = input.paid
       ? input.paidUntil
@@ -281,8 +305,9 @@ export async function adminMarkRent(request: HandlerRequest) {
 export async function adminVerifyIdentity(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminVerifyIdentitySchema, request.data);
-    const shop = await requireShop(input.shopId);
+    const shop = await requireShop(input.shopId, countryCode);
     const next: Shop = { ...shop, idVerified: input.verified };
     await prisma.shop.update({
       where: { id: shop.id },
@@ -302,9 +327,12 @@ export async function adminVerifyIdentity(request: HandlerRequest) {
 export async function adminUpsertAgent(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminAgentSchema, request.data);
     const code = input.code.toUpperCase();
-    const duplicate = await prisma.agent.findUnique({ where: { code } });
+    const duplicate = await prisma.agent.findUnique({
+      where: { countryCode_code: { countryCode, code } },
+    });
     if (duplicate && duplicate.id !== input.agentId) {
       throw new ApiError("already-exists", "This agent code is already in use.");
     }
@@ -327,6 +355,7 @@ export async function adminUpsertAgent(request: HandlerRequest) {
             code,
             commission: input.commission,
             active: input.active,
+            countryCode,
             updatedBy: adminUid,
           },
         });
@@ -339,8 +368,9 @@ export async function adminUpsertAgent(request: HandlerRequest) {
 export async function adminDeleteAgent(request: HandlerRequest) {
   try {
     requireAdmin(request);
+    const countryCode = requireCountry(request);
     const { agentId } = parseInput(adminAgentIdSchema, request.data);
-    await prisma.agent.deleteMany({ where: { id: agentId } });
+    await prisma.agent.deleteMany({ where: { id: agentId, countryCode } });
     return { deleted: true };
   } catch (error) {
     throw asApiError(error);
@@ -350,6 +380,7 @@ export async function adminDeleteAgent(request: HandlerRequest) {
 export async function adminUpsertBanner(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminBannerSchema, request.data);
     const data = {
       title: input.title,
@@ -361,6 +392,7 @@ export async function adminUpsertBanner(request: HandlerRequest) {
       startsAt: input.startsAt ? new Date(input.startsAt) : null,
       endsAt: input.endsAt ? new Date(input.endsAt) : null,
       updatedBy: adminUid,
+      countryCode,
     };
     const banner = input.bannerId
       ? await prisma.banner.update({ where: { id: input.bannerId }, data })
@@ -374,8 +406,9 @@ export async function adminUpsertBanner(request: HandlerRequest) {
 export async function adminDeleteBanner(request: HandlerRequest) {
   try {
     requireAdmin(request);
+    const countryCode = requireCountry(request);
     const { bannerId } = parseInput(adminBannerIdSchema, request.data);
-    await prisma.banner.deleteMany({ where: { id: bannerId } });
+    await prisma.banner.deleteMany({ where: { id: bannerId, countryCode } });
     return { deleted: true };
   } catch (error) {
     throw asApiError(error);
@@ -385,8 +418,9 @@ export async function adminDeleteBanner(request: HandlerRequest) {
 export async function adminReviewSeller(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminReviewSellerSchema, request.data);
-    const shop = await requireShop(input.shopId);
+    const shop = await requireShop(input.shopId, countryCode);
     const approved = input.decision === "approved";
     const next: Shop = {
       ...shop,
@@ -416,9 +450,13 @@ export async function adminReviewSeller(request: HandlerRequest) {
 export async function adminListProducts(request: HandlerRequest) {
   try {
     requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminListProductsSchema, request.data);
     const products = await prisma.product.findMany({
-      where: input.status ? { approvalStatus: input.status } : undefined,
+      where: {
+        shop: { countryCode },
+        ...(input.status ? { approvalStatus: input.status } : {}),
+      },
       include: { shop: true },
       orderBy: { createdAt: "desc" },
       take: input.limit,
@@ -437,12 +475,13 @@ export async function adminListProducts(request: HandlerRequest) {
 export async function adminSetProductStatus(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminProductStatusSchema, request.data);
     const product = await prisma.product.findUnique({
       where: { id: input.productId },
       include: { shop: true },
     });
-    if (!product) {
+    if (!product || product.shop.countryCode !== countryCode) {
       throw new ApiError("not-found", "Product not found.");
     }
     const updated = await prisma.product.update({
@@ -465,6 +504,7 @@ export async function adminSetProductStatus(request: HandlerRequest) {
 export async function adminUpsertCategoryBanner(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminCategoryBannerSchema, request.data);
     const data = {
       categoryName: input.categoryName,
@@ -475,11 +515,17 @@ export async function adminUpsertCategoryBanner(request: HandlerRequest) {
       active: input.active,
       position: input.position,
       updatedBy: adminUid,
+      countryCode,
     };
     const banner = input.bannerId
       ? await prisma.categoryBanner.update({ where: { id: input.bannerId }, data })
       : await prisma.categoryBanner.upsert({
-          where: { categoryName: input.categoryName },
+          where: {
+            countryCode_categoryName: {
+              countryCode,
+              categoryName: input.categoryName,
+            },
+          },
           create: data,
           update: data,
         });
@@ -492,8 +538,9 @@ export async function adminUpsertCategoryBanner(request: HandlerRequest) {
 export async function adminDeleteCategoryBanner(request: HandlerRequest) {
   try {
     requireAdmin(request);
+    const countryCode = requireCountry(request);
     const { bannerId } = parseInput(adminCategoryBannerIdSchema, request.data);
-    await prisma.categoryBanner.deleteMany({ where: { id: bannerId } });
+    await prisma.categoryBanner.deleteMany({ where: { id: bannerId, countryCode } });
     return { deleted: true };
   } catch (error) {
     throw asApiError(error);
@@ -503,20 +550,38 @@ export async function adminDeleteCategoryBanner(request: HandlerRequest) {
 export async function adminSetPlatformBranding(request: HandlerRequest) {
   try {
     const adminUid = requireAdmin(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(adminBrandingSchema, request.data);
+    const currency = COUNTRY_CURRENCY[countryCode];
     await prisma.platformConfig.upsert({
-      where: { id: "config" },
+      where: { id: countryCode },
       create: {
-        id: "config",
+        id: countryCode,
+        countryCode,
+        currency,
         platformLogo: input.platformLogo ?? null,
+        contactPhone: input.contactPhone ?? "",
+        contactEmail: input.contactEmail ?? "",
+        contactAddress: input.contactAddress ?? "",
         updatedBy: adminUid,
       },
       update: {
-        platformLogo: input.platformLogo ?? null,
+        ...(input.platformLogo !== undefined
+          ? { platformLogo: input.platformLogo ?? null }
+          : {}),
+        ...(input.contactPhone !== undefined
+          ? { contactPhone: input.contactPhone }
+          : {}),
+        ...(input.contactEmail !== undefined
+          ? { contactEmail: input.contactEmail }
+          : {}),
+        ...(input.contactAddress !== undefined
+          ? { contactAddress: input.contactAddress }
+          : {}),
         updatedBy: adminUid,
       },
     });
-    return { config: await getPlatformConfig() };
+    return { config: await getPlatformConfig(countryCode) };
   } catch (error) {
     throw asApiError(error);
   }

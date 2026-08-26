@@ -3,6 +3,7 @@ import {
   asApiError,
   parseInput,
   requireAuth,
+  requireCountry,
   type HandlerRequest,
 } from "../errors.js";
 import {
@@ -16,7 +17,12 @@ import {
   getNabooPayDefaultCancelUrl,
   getNabooPayDefaultReturnUrl,
   getNabooPayFeesCustomerSide,
+  getPublicApiUrl,
+  getSenePayDefaultCancelUrl,
+  getSenePayDefaultReturnUrl,
+  getSenePayWebhookUrl,
 } from "../config.js";
+import { COUNTRY_PAYMENT_PROVIDER } from "../country.js";
 import { prisma } from "../prisma.js";
 import {
   assertShopOwner,
@@ -27,6 +33,7 @@ import {
 import {
   appendQuery,
   normalizeNabooPayStatus,
+  normalizeSenePayStatus,
   parseAllowedOrigins,
   parseXofAmount,
   resolveRedirectUrl,
@@ -35,12 +42,17 @@ import {
 } from "../payments/helpers.js";
 import { createTransaction, getTransaction, NabooPayError } from "../payments/naboopay.js";
 import {
+  createCheckoutSession,
+  getCheckoutSession,
+  SenePayError,
+} from "../payments/senepay.js";
+import {
   applyVerifiedPayment,
   serializePayment,
 } from "../payments/fulfillment.js";
 
 function fromUnknown(error: unknown): ApiError {
-  if (error instanceof NabooPayError) {
+  if (error instanceof NabooPayError || error instanceof SenePayError) {
     if (error.status === 429) {
       return new ApiError(
         "resource-exhausted",
@@ -75,6 +87,8 @@ function requestHash(input: {
 export async function createPayment(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
+    const countryCode = requireCountry(request);
+    const provider = COUNTRY_PAYMENT_PROVIDER[countryCode];
     const input = parseInput(createPaymentSchema, request.data);
     const bannerImages = input.bannerImages.filter(
       (url): url is string => typeof url === "string" && url.length > 0,
@@ -88,9 +102,12 @@ export async function createPayment(request: HandlerRequest) {
 
     const [shop, config, user] = await Promise.all([
       assertShopOwner(auth.uid, input.shopId),
-      getPlatformConfig(),
+      getPlatformConfig(countryCode),
       prisma.user.findUnique({ where: { id: auth.uid } }),
     ]);
+    if (shop.countryCode !== countryCode) {
+      throw new ApiError("not-found", "Shop not found.");
+    }
     const profile = serializeProfile(user);
     const demoRentAmount = (() => {
       const raw = Number(env("DEMO_RENT_AMOUNT", "10"));
@@ -116,19 +133,19 @@ export async function createPayment(request: HandlerRequest) {
     });
 
     const origins = parseAllowedOrigins(getAllowedRedirectOrigins());
+    const defaultReturn =
+      provider === "senepay"
+        ? getSenePayDefaultReturnUrl() || getNabooPayDefaultReturnUrl()
+        : getNabooPayDefaultReturnUrl();
+    const defaultCancel =
+      provider === "senepay"
+        ? getSenePayDefaultCancelUrl() || getNabooPayDefaultCancelUrl()
+        : getNabooPayDefaultCancelUrl();
     let successUrl: string;
     let errorUrl: string;
     try {
-      successUrl = resolveRedirectUrl(
-        input.returnUrl,
-        getNabooPayDefaultReturnUrl(),
-        origins,
-      );
-      errorUrl = resolveRedirectUrl(
-        input.cancelUrl,
-        getNabooPayDefaultCancelUrl(),
-        origins,
-      );
+      successUrl = resolveRedirectUrl(input.returnUrl, defaultReturn, origins);
+      errorUrl = resolveRedirectUrl(input.cancelUrl, defaultCancel, origins);
     } catch (error) {
       throw new ApiError(
         "invalid-argument",
@@ -140,11 +157,11 @@ export async function createPayment(request: HandlerRequest) {
       input.payerPhone || shop.phone || (typeof profile?.phone === "string" ? profile.phone : "");
     let phone: string;
     try {
-      phone = toInternationalPhone(String(phoneSource));
+      phone = toInternationalPhone(String(phoneSource), countryCode);
     } catch {
       throw new ApiError(
         "invalid-argument",
-        "Un numéro de téléphone sénégalais valide est requis (ex: 77 123 45 67).",
+        `Un numéro de téléphone valide est requis pour ${countryCode}.`,
       );
     }
 
@@ -174,12 +191,12 @@ export async function createPayment(request: HandlerRequest) {
           purpose: input.purpose,
           paymentMethod: input.paymentMethod,
           amount,
-          currency: "XOF",
+          currency: config.currency,
           status: "pending",
           sponsorOption: input.sponsorOption ?? null,
           durationDays,
           bannerImages,
-          provider: "naboopay",
+          provider,
           idempotencyKey: input.idempotencyKey,
           requestHash: hash,
         },
@@ -199,18 +216,50 @@ export async function createPayment(request: HandlerRequest) {
       paymentId: payment.id,
     });
 
+    const productName =
+      input.purpose === "rent"
+        ? input.demoMode
+          ? `Loyer Seneko Market (Démo ${amount} F)`
+          : "Loyer Seneko Market"
+        : `Sponsoring Seneko Market (${input.sponsorOption})`;
+    const productDescription = `${input.purpose}:${payment.id}:${input.shopId}${input.demoMode ? ":demo" : ""}`;
+
+    if (provider === "senepay") {
+      const webhookUrl =
+        getSenePayWebhookUrl() || `${getPublicApiUrl()}/webhooks/senepay`;
+      const checkout = await createCheckoutSession({
+        amount,
+        currency: config.currency,
+        country: countryCode,
+        orderReference: payment.id,
+        description: productName,
+        returnUrl: successUrl,
+        cancelUrl: errorUrl,
+        webhookUrl,
+        metadata: {
+          paymentId: payment.id,
+          shopId: input.shopId,
+          purpose: input.purpose,
+          phone,
+        },
+      });
+      const updated = await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          providerOrderId: checkout.sessionToken,
+          checkoutUrl: checkout.checkoutUrl,
+        },
+      });
+      return serializePayment(updated);
+    }
+
     const checkout = await createTransaction({
       methodOfPayment:
         input.paymentMethod === "card"
           ? ["wave", "orange_money", "bank"]
           : ["wave", "orange_money"],
-      productName:
-        input.purpose === "rent"
-          ? input.demoMode
-            ? `Loyer Seneko Market (Démo ${amount} F)`
-            : "Loyer Seneko Market"
-          : `Sponsoring Seneko Market (${input.sponsorOption})`,
-      productDescription: `${input.purpose}:${payment.id}:${input.shopId}${input.demoMode ? ":demo" : ""}`,
+      productName,
+      productDescription,
       amount,
       firstName:
         typeof profile?.firstname === "string" && profile.firstname
@@ -252,6 +301,20 @@ export async function getPaymentStatus(request: HandlerRequest) {
     }
 
     if (payment.status === "pending" && payment.providerOrderId) {
+      if (payment.provider === "senepay") {
+        const remote = await getCheckoutSession(payment.providerOrderId);
+        const status = normalizeSenePayStatus(remote.status);
+        const amount = parseXofAmount(remote.amount ?? payment.amount);
+        if (amount !== payment.amount) {
+          throw new ApiError(
+            "failed-precondition",
+            "Payment amount does not match the provider record.",
+          );
+        }
+        const applied = await applyVerifiedPayment(paymentId, status);
+        return serializePayment(applied);
+      }
+
       const remote = await getTransaction(payment.providerOrderId);
       const status = normalizeNabooPayStatus(remote.transaction_status);
       const amount = parseXofAmount(remote.amount ?? payment.amount);

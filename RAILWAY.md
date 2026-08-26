@@ -1,7 +1,9 @@
 # Deploy Seneko Market (Railway API + Netlify UI)
 
-There is no Firebase. Railway runs the API, Postgres, uploads, and NabooPay.
+There is no Firebase. Railway runs the API, Postgres, uploads, NabooPay (Senegal), and SenePay (Benin / Togo / DRC).
 Netlify serves the static UI in `public/`.
+
+One shared Railway backend can serve **four country frontends**. Each Netlify site sets its own `api-config.json` with `country`, theme colors, and flag.
 
 ## 1. Railway
 
@@ -17,18 +19,24 @@ Netlify serves the static UI in `public/`.
 | `JWT_SECRET` | Long random string |
 | `PUBLIC_API_URL` | Must be the public Railway URL with `https://`, e.g. `https://senekomarket-production.up.railway.app`. Shop and product images break without this. |
 | `UPLOAD_ROOT` | `/data/uploads` |
-| `CORS_ORIGINS` | Netlify origin, e.g. `https://yoursite.netlify.app` |
-| `ALLOWED_REDIRECT_ORIGINS` | Same as CORS, plus any custom domain |
-| `ADMIN_EMAIL` | First admin login |
+| `CORS_ORIGINS` | All Netlify origins, comma-separated (SN + BJ + TG + CD) |
+| `ALLOWED_REDIRECT_ORIGINS` | Same as CORS, plus any custom domains |
+| `ADMIN_EMAIL` | First admin login (created for each country) |
 | `ADMIN_PASSWORD` | First admin password |
-| `NABOOPAY_API_KEY` | From NabooPay |
+| `NABOOPAY_API_KEY` | From NabooPay (Senegal only) |
 | `NABOOPAY_WEBHOOK_SECRET` | From NabooPay |
-| `NABOOPAY_DEFAULT_RETURN_URL` | `https://yoursite.netlify.app/?payment_return=success` |
-| `NABOOPAY_DEFAULT_CANCEL_URL` | `https://yoursite.netlify.app/?payment_return=cancel` |
+| `NABOOPAY_DEFAULT_RETURN_URL` | Senegal Netlify return URL |
+| `NABOOPAY_DEFAULT_CANCEL_URL` | Senegal Netlify cancel URL |
 | `NABOOPAY_FEES_CUSTOMER_SIDE` | `false` |
+| `SENEPAY_API_KEY` | From SenePay (`X-Api-Key`) |
+| `SENEPAY_API_SECRET` | From SenePay (`X-Api-Secret`) |
+| `SENEPAY_WEBHOOK_SECRET` | `whsec_…` from SenePay |
+| `SENEPAY_DEFAULT_RETURN_URL` | Optional fallback return URL |
+| `SENEPAY_DEFAULT_CANCEL_URL` | Optional fallback cancel URL |
+| `SENEPAY_WEBHOOK_URL` | Prefer Railway direct: `https://YOUR-RAILWAY/webhooks/senepay` (or a Netlify proxy URL) |
 
 6. Deploy. Open `/health` — it should return `{ "ok": true }`.
-7. Copy `public/api-config.example.json` to `public/api-config.json` and set `apiUrl` to the Railway URL.
+7. Migrations create `PlatformConfig` rows for `SN`, `BJ`, `TG`, `CD` and add `countryCode` on shops/users/banners.
 
 Local API without Docker:
 
@@ -41,34 +49,64 @@ npm run build
 npm start
 ```
 
-## 2. NabooPay webhook
+## 2. Payment webhooks
+
+### NabooPay (Senegal)
 
 In NabooPay → Settings → Integration:
 
 `https://YOUR-RAILWAY-SERVICE.up.railway.app/webhooks/naboopay`
 
-## 3. Netlify
+Or via Netlify proxy:
 
-Publish `public/`. `netlify.toml` already rewrites the SPA to `index.html`.
+`https://YOUR-SENEGAL-SITE.netlify.app/.netlify/functions/naboopay-webhook`
 
-After the Railway URL is known, include `public/api-config.json` in the Netlify publish folder (it is gitignored locally so you can set it in the Netlify UI or as a build file).
+### SenePay (Benin, Togo, DRC)
 
-The Railway `CORS_ORIGINS` value must include the Netlify site origin.
+Register one webhook URL in SenePay (all three countries share the same Railway handler):
 
-### Netlify payment functions
+`https://YOUR-RAILWAY-SERVICE.up.railway.app/webhooks/senepay`
 
-This project now exposes payment endpoints through Netlify Functions:
+Or via Netlify proxy:
 
-- `/.netlify/functions/create-payment` (frontend -> function -> Railway payment callable)
-- `/.netlify/functions/naboopay-webhook` (NabooPay webhook -> function -> Railway webhook)
+`https://YOUR-BENIN-SITE.netlify.app/.netlify/functions/senepay-webhook`
 
-Set this Netlify environment variable:
+Signature header: `X-SenePay-Signature` (HMAC-SHA256 of raw body with `SENEPAY_WEBHOOK_SECRET`).
 
-- `RAILWAY_API_URL=https://senekomarket-production.up.railway.app`
+## 3. Netlify — one site per country
 
-Webhook URL to register in NabooPay:
+Publish `public/` for each country site. Use the matching template:
 
-- `https://fantastic-meringue-c930af.netlify.app/.netlify/functions/naboopay-webhook`
+| Country | Template file | Payment provider |
+| --- | --- | --- |
+| Senegal | `api-config.example.json` | NabooPay |
+| Benin | `api-config.example.benin.json` | SenePay |
+| Togo | `api-config.example.togo.json` | SenePay |
+| DRC | `api-config.example.drc.json` | SenePay |
 
-Important: the webhook must be called by NabooPay with a valid `X-Signature`.
-A direct manual POST from Postman without signature will return `401 Invalid signature` by design.
+For each site:
+
+1. Copy the template to `api-config.json` (or inject it at build time) and set `apiUrl` to the Railway URL.
+2. Set Netlify env `RAILWAY_API_URL` to the same Railway URL (needed by `create-payment` / webhook proxies).
+3. Add the Netlify origin to Railway `CORS_ORIGINS` and `ALLOWED_REDIRECT_ORIGINS`.
+
+Country routing uses the `X-Platform-Country` header (from `api-config.json` → `country`). Shops, users, banners, and admin config are isolated per country in the shared database.
+
+### Admin contact details
+
+In Admin → **Informations de contact**, set phone, email, and physical address. These appear in the top contact bar and footer for that country only.
+
+### Country flag
+
+The navbar shows the flag from `flagUrl` (assets in `public/flags/`: `sn.svg`, `bj.svg`, `tg.svg`, `cd.svg`).
+
+## 4. Provider behavior
+
+| Country code | Currency | Provider |
+| --- | --- | --- |
+| `SN` | XOF | NabooPay |
+| `BJ` | XOF | SenePay hosted checkout |
+| `TG` | XOF | SenePay hosted checkout |
+| `CD` | CDF | SenePay hosted checkout |
+
+SenePay docs: https://api.sene-pay.com/docs.html

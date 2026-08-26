@@ -1,4 +1,6 @@
 import type { z } from "zod";
+import type { PlatformCountry } from "./country.js";
+import { DEFAULT_COUNTRY } from "./country.js";
 
 export class ApiError extends Error {
   constructor(
@@ -21,7 +23,12 @@ export type HandlerRequest = {
   data: unknown;
   auth?: AuthContext;
   ip?: string;
+  countryCode?: PlatformCountry;
 };
+
+export function requireCountry(request: HandlerRequest): PlatformCountry {
+  return request.countryCode ?? DEFAULT_COUNTRY;
+}
 
 export function parseInput<TSchema extends z.ZodType>(
   schema: TSchema,

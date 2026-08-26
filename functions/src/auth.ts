@@ -1,6 +1,11 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getAdminEmail, getAdminPassword, getJwtSecret } from "./config.js";
+import {
+  DEFAULT_COUNTRY,
+  PLATFORM_COUNTRIES,
+  type PlatformCountry,
+} from "./country.js";
 import { ApiError, type AuthContext } from "./errors.js";
 import { prisma } from "./prisma.js";
 import { serializeProfileWithShop } from "./data.js";
@@ -37,35 +42,47 @@ export async function bootstrapAdmin(): Promise<void> {
   const email = getAdminEmail();
   const password = getAdminPassword();
   if (!email || !password) return;
-  const existing = await prisma.user.findUnique({ where: { email } });
   const passwordHash = await bcrypt.hash(password, 12);
-  if (existing) {
-    await prisma.user.update({
-      where: { id: existing.id },
-      data: { role: "admin", passwordHash },
+  for (const countryCode of PLATFORM_COUNTRIES) {
+    const existing = await prisma.user.findUnique({
+      where: {
+        countryCode_email: { countryCode, email },
+      },
     });
-    return;
+    if (existing) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { role: "admin", passwordHash },
+      });
+      continue;
+    }
+    await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        firstname: "Admin",
+        lastname: "Seneko",
+        role: "admin",
+        countryCode,
+      },
+    });
   }
-  await prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      firstname: "Admin",
-      lastname: "Seneko",
-      role: "admin",
-    },
-  });
 }
 
-export async function registerUser(input: {
-  email: string;
-  password: string;
-  firstname?: string;
-  lastname?: string;
-  phone?: string;
-}): Promise<{ token: string; profile: Record<string, unknown> | null; admin: boolean }> {
+export async function registerUser(
+  input: {
+    email: string;
+    password: string;
+    firstname?: string;
+    lastname?: string;
+    phone?: string;
+  },
+  countryCode: PlatformCountry = DEFAULT_COUNTRY,
+): Promise<{ token: string; profile: Record<string, unknown> | null; admin: boolean }> {
   const email = input.email.trim().toLowerCase();
-  const exists = await prisma.user.findUnique({ where: { email } });
+  const exists = await prisma.user.findUnique({
+    where: { countryCode_email: { countryCode, email } },
+  });
   if (exists) {
     throw new ApiError("already-exists", "This email is already in use.");
   }
@@ -79,6 +96,7 @@ export async function registerUser(input: {
       firstname: input.firstname ?? "",
       lastname: input.lastname ?? "",
       phone: input.phone ?? "",
+      countryCode,
       role: email === getAdminEmail() ? "admin" : "merchant",
     },
   });
@@ -92,9 +110,15 @@ export async function registerUser(input: {
 export async function loginUser(
   email: string,
   password: string,
+  countryCode: PlatformCountry = DEFAULT_COUNTRY,
 ): Promise<{ token: string; profile: Record<string, unknown> | null; admin: boolean }> {
   const user = await prisma.user.findUnique({
-    where: { email: email.trim().toLowerCase() },
+    where: {
+      countryCode_email: {
+        countryCode,
+        email: email.trim().toLowerCase(),
+      },
+    },
   });
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     throw new ApiError("invalid-argument", "Email ou mot de passe incorrect.");

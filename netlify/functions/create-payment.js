@@ -41,6 +41,10 @@ exports.handler = async (event) => {
       headers: {
         "Content-Type": "application/json",
         Authorization: auth,
+        "X-Platform-Country":
+          event.headers["x-platform-country"] ||
+          event.headers["X-Platform-Country"] ||
+          "SN",
       },
       body: JSON.stringify(payload),
       signal: controller.signal,

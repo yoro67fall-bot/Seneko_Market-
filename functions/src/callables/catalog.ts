@@ -1,5 +1,5 @@
 import type { HandlerRequest } from "../errors.js";
-import { ApiError, asApiError, parseInput } from "../errors.js";
+import { ApiError, asApiError, parseInput, requireCountry } from "../errors.js";
 import { bootstrapPublicSchema, publicShopSchema, shopEventSchema } from "../schemas.js";
 import { prisma } from "../prisma.js";
 import {
@@ -13,18 +13,19 @@ import { toPublicAssetUrl } from "../uploads.js";
 
 export async function bootstrapPublic(request: HandlerRequest) {
   try {
+    const countryCode = requireCountry(request);
     const input = parseInput(bootstrapPublicSchema, request.data);
     const now = new Date();
     await syncShopVisibility(now);
     const [config, banners, categoryBanners] = await Promise.all([
-      getPlatformConfig(),
+      getPlatformConfig(countryCode),
       prisma.banner.findMany({
-        where: { active: true },
+        where: { active: true, countryCode },
         orderBy: { position: "asc" },
         take: 50,
       }),
       prisma.categoryBanner.findMany({
-        where: { active: true },
+        where: { active: true, countryCode },
         orderBy: { position: "asc" },
         take: 100,
       }),
@@ -62,6 +63,7 @@ export async function bootstrapPublic(request: HandlerRequest) {
       approved: true,
       visible: true,
       rentPaid: true,
+      countryCode,
       ...(input.category ? { category: input.category } : {}),
       ...(input.shopId ? { id: input.shopId } : {}),
     };
@@ -91,6 +93,7 @@ export async function bootstrapPublic(request: HandlerRequest) {
 
 export async function getPublicShop(request: HandlerRequest) {
   try {
+    const countryCode = requireCountry(request);
     const { shopId } = parseInput(publicShopSchema, request.data);
     const now = new Date();
     await syncShopVisibility(now);
@@ -98,7 +101,7 @@ export async function getPublicShop(request: HandlerRequest) {
       where: { id: shopId },
       include: { products: { orderBy: { createdAt: "desc" }, take: 200 } },
     });
-    if (!shop || !isPublicShop(shop, now)) {
+    if (!shop || shop.countryCode !== countryCode || !isPublicShop(shop, now)) {
       throw new ApiError("not-found", "Shop not found.");
     }
     return { shop: publicShop(shop, shop.products, now) };
@@ -128,9 +131,10 @@ function utcDay(date = new Date()): Date {
 
 export async function recordShopEvent(request: HandlerRequest) {
   try {
+    const countryCode = requireCountry(request);
     const input = parseInput(shopEventSchema, request.data);
     const shop = await prisma.shop.findUnique({ where: { id: input.shopId } });
-    if (!shop || shop.deletedAt) {
+    if (!shop || shop.deletedAt || shop.countryCode !== countryCode) {
       throw new ApiError("not-found", "Shop not found.");
     }
     if (request.auth?.uid && request.auth.uid === shop.ownerId) {

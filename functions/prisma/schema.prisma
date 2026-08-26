@@ -10,18 +10,22 @@ datasource db {
 
 model User {
   id                   String    @id @default(cuid())
-  email                String    @unique
+  email                String
   passwordHash         String
   firstname            String    @default("")
   lastname             String    @default("")
   phone                String    @default("")
   role                 String    @default("merchant")
+  countryCode          String    @default("SN")
   onboardingCompleted  Boolean   @default(false)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   shop                 Shop?
   payments             Payment[]
   sponsorships         Sponsorship[]
+
+  @@unique([countryCode, email])
+  @@index([countryCode])
 }
 
 model Shop {
@@ -29,7 +33,7 @@ model Shop {
   ownerId          String     @unique
   owner            User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name             String
-  nameNormalized   String     @unique
+  nameNormalized   String
   category         String
   description      String
   phone            String
@@ -61,12 +65,16 @@ model Shop {
   rentMarkedAt     DateTime?
   visitCount       Int        @default(0)
   contactCount     Int        @default(0)
+  countryCode      String     @default("SN")
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   products         Product[]
   payments         Payment[]
   sponsorships     Sponsorship[]
   events           ShopEvent[]
+
+  @@unique([countryCode, nameNormalized])
+  @@index([countryCode])
 }
 
 model ShopEvent {
@@ -158,48 +166,60 @@ model Sponsorship {
 }
 
 model Agent {
-  id         String   @id @default(cuid())
-  name       String
-  phone      String
-  code       String   @unique
-  commission Float
-  active     Boolean  @default(true)
-  updatedBy  String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  phone       String
+  code        String
+  commission  Float
+  active      Boolean  @default(true)
+  countryCode String   @default("SN")
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([countryCode, code])
+  @@index([countryCode])
 }
 
 model Banner {
-  id        String    @id @default(cuid())
-  title     String
-  subtitle  String    @default("")
-  image     String?
-  link      String?
-  position  Int       @default(0)
-  active    Boolean   @default(true)
-  startsAt  DateTime?
-  endsAt    DateTime?
-  updatedBy String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  title       String
+  subtitle    String    @default("")
+  image       String?
+  link        String?
+  position    Int       @default(0)
+  active      Boolean   @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  countryCode String    @default("SN")
+  updatedBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([countryCode])
 }
 
 model CategoryBanner {
   id           String   @id @default(cuid())
-  categoryName String   @unique
+  categoryName String
   description  String   @default("")
   image        String?
   link         String?
   price        Int      @default(0)
   active       Boolean  @default(true)
   position     Int      @default(0)
+  countryCode  String   @default("SN")
   updatedBy    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@unique([countryCode, categoryName])
+  @@index([countryCode])
 }
 
 model PlatformConfig {
-  id               String   @id @default("config")
+  id               String   @id
+  countryCode      String   @unique
   rentAmount       Int      @default(5000)
   rentDurationDays Int      @default(30)
   sponsorPrice7    Int      @default(5000)
@@ -208,6 +228,9 @@ model PlatformConfig {
   sponsorPrice60   Int      @default(20000)
   currency         String   @default("XOF")
   platformLogo     String?
+  contactPhone     String   @default("")
+  contactEmail     String   @default("")
+  contactAddress   String   @default("")
   updatedBy        String?
   updatedAt        DateTime @updatedAt
 }

@@ -319,7 +319,14 @@ export const adminBannerIdSchema = z
   .strict();
 
 export const adminBrandingSchema = z
-  .object({ platformLogo: optionalUrl })
+  .object({
+    platformLogo: optionalUrl,
+    contactPhone: z.string().trim().max(40).optional(),
+    contactEmail: z
+      .union([z.literal(""), z.string().trim().email().max(160)])
+      .optional(),
+    contactAddress: z.string().trim().max(300).optional(),
+  })
   .strict();
 
 export const adminListProductsSchema = z

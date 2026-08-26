@@ -240,6 +240,14 @@
             padding: 0 0.5rem;
         }
 
+        .navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            flex-shrink: 0;
+            min-width: 0;
+        }
+
         .navbar-brand {
             display: flex;
             align-items: center;
@@ -289,6 +297,73 @@
 
         .navbar-brand .brand-text {
             display: none;
+        }
+
+        .country-flag-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            height: 28px;
+            width: auto;
+            margin: 0 0.35rem;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            background: #fff;
+        }
+
+        .country-flag-badge img {
+            display: block;
+            height: 28px;
+            width: auto;
+            max-width: 42px;
+            object-fit: cover;
+        }
+
+        @media (min-width: 768px) {
+            .country-flag-badge {
+                height: 34px;
+                margin: 0 0.6rem;
+            }
+            .country-flag-badge img {
+                height: 34px;
+                max-width: 52px;
+            }
+        }
+
+        .admin-contact-config {
+            background: var(--bg-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .admin-contact-config .contact-config-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .admin-contact-config .contact-config-row label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .admin-contact-config .contact-config-row input {
+            padding: 0.55rem 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+        }
+
+        .admin-contact-config .contact-config-row input:focus {
+            outline: none;
+            border-color: var(--primary);
         }
 
         .navbar-actions {
@@ -4952,14 +5027,19 @@
     ================================================================ -->
     <header class="navbar" id="navbar">
         <div class="container">
-            <a class="navbar-brand" onclick="showPage('home'); resetFilter();">
-                <div class="brand-logo-wrapper" id="brandLogoContainer">
-                    <!-- Logo par défaut (icône) -->
-                    <div class="brand-icon">
-                        <i class="fas fa-store"></i>
+            <div class="navbar-left">
+                <a class="navbar-brand" onclick="showPage('home'); resetFilter();">
+                    <div class="brand-logo-wrapper" id="brandLogoContainer">
+                        <!-- Logo par défaut (icône) -->
+                        <div class="brand-icon">
+                            <i class="fas fa-store"></i>
+                        </div>
                     </div>
+                </a>
+                <div class="country-flag-badge" id="countryFlagBadge" aria-label="Pays" style="display:none;">
+                    <img id="countryFlagImg" src="" alt="">
                 </div>
-            </a>
+            </div>
 
             <ul class="navbar-desktop-links" id="navDesktopLinks">
                 <li><a class="nav-link active" onclick="showPage('home'); resetFilter();" id="navHomeDesktop">
@@ -5016,11 +5096,11 @@
     <!-- Barre d'informations de contact -->
     <div class="contact-info-bar" id="contactInfoBar">
         <div class="container">
-            <a href="tel:+221787366262"><i class="fas fa-phone"></i> +221 78 736 62 62</a>
+            <a id="contactBarPhone" href="tel:+221787366262"><i class="fas fa-phone"></i> <span id="contactBarPhoneText">+221 78 736 62 62</span></a>
             <span class="contact-sep">|</span>
-            <a href="mailto:contact@senekomarket.com"><i class="fas fa-envelope"></i> contact@senekomarket.com</a>
+            <a id="contactBarEmail" href="mailto:contact@senekomarket.com"><i class="fas fa-envelope"></i> <span id="contactBarEmailText">contact@senekomarket.com</span></a>
             <span class="contact-sep">|</span>
-            <span><i class="fas fa-map-marker-alt"></i> Dakar, Sénégal</span>
+            <span id="contactBarAddress"><i class="fas fa-map-marker-alt"></i> <span id="contactBarAddressText">Dakar, Sénégal</span></span>
         </div>
     </div>
 
@@ -5773,6 +5853,27 @@
                 </div>
             </div>
 
+            <!-- Informations de contact -->
+            <div class="admin-contact-config">
+                <h3><i class="fas fa-address-card"></i> Informations de contact</h3>
+                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Téléphone, email et adresse affichés sur la plateforme (modifiable par pays).</p>
+                <div class="contact-config-row">
+                    <label for="contactPhoneInput">Téléphone</label>
+                    <input type="text" id="contactPhoneInput" placeholder="+229 01 23 45 67">
+                </div>
+                <div class="contact-config-row">
+                    <label for="contactEmailInput">Email</label>
+                    <input type="email" id="contactEmailInput" placeholder="contact@exemple.com">
+                </div>
+                <div class="contact-config-row">
+                    <label for="contactAddressInput">Adresse physique</label>
+                    <input type="text" id="contactAddressInput" placeholder="Ville, Pays">
+                </div>
+                <button class="btn btn-primary" onclick="saveContactConfig()">
+                    <i class="fas fa-save"></i> Enregistrer les contacts
+                </button>
+            </div>
+
             <!-- Configuration du loyer -->
             <div class="admin-rent-config">
                 <h3><i class="fas fa-coins" style="color:var(--warning);"></i> Configuration du loyer</h3>
@@ -6288,19 +6389,19 @@ FOOTER
                 <div>
                     <h4>Contact</h4>
                     <ul>
-                        <li><a href="mailto:contact@senekomarket.com"><i class="fas fa-envelope"></i> contact@senekomarket.com</a></li>
-                        <li><a href="tel:+221787366262"><i class="fas fa-phone"></i> +221 78 736 62 62</a></li>
-                        <li><a href="#"><i class="fas fa-map-marker-alt"></i> Dakar, Sénégal</a></li>
+                        <li><a id="footerContactEmail" href="mailto:contact@senekomarket.com"><i class="fas fa-envelope"></i> <span id="footerContactEmailText">contact@senekomarket.com</span></a></li>
+                        <li><a id="footerContactPhone" href="tel:+221787366262"><i class="fas fa-phone"></i> <span id="footerContactPhoneText">+221 78 736 62 62</span></a></li>
+                        <li><a href="#"><i class="fas fa-map-marker-alt"></i> <span id="footerContactAddressText">Dakar, Sénégal</span></a></li>
                     </ul>
                 </div>
             </div>
             <div class="footer-bottom">
                 <div class="footer-contact">
-                    <a href="tel:+221787366262"><i class="fas fa-phone"></i> +221 78 736 62 62</a>
+                    <a id="footerBottomPhone" href="tel:+221787366262"><i class="fas fa-phone"></i> <span id="footerBottomPhoneText">+221 78 736 62 62</span></a>
                     <span>|</span>
-                    <a href="mailto:contact@senekomarket.com"><i class="fas fa-envelope"></i> contact@senekomarket.com</a>
+                    <a id="footerBottomEmail" href="mailto:contact@senekomarket.com"><i class="fas fa-envelope"></i> <span id="footerBottomEmailText">contact@senekomarket.com</span></a>
                     <span>|</span>
-                    <span><i class="fas fa-map-marker-alt"></i> Dakar, Sénégal</span>
+                    <span><i class="fas fa-map-marker-alt"></i> <span id="footerBottomAddressText">Dakar, Sénégal</span></span>
                 </div>
                 <span>© 2026 Seneko Market — <span id="footerRentAmount">5 000</span> F/mois — Jusqu'à 10 images/produit</span>
             </div>
@@ -7599,6 +7700,43 @@ SCRIPT COMPLET
         // ================================================================
         // CONFIGURATION DU LOYER
         // ================================================================
+        function applyContactDisplay({ phone = '', email = '', address = '' } = {}) {
+            const setText = (id, value) => {
+                const node = document.getElementById(id);
+                if (node && value) node.textContent = value;
+            };
+            const setHref = (id, href) => {
+                const node = document.getElementById(id);
+                if (node && href) node.setAttribute('href', href);
+            };
+            if (phone) {
+                const tel = phone.replace(/\s+/g, '');
+                setText('contactBarPhoneText', phone);
+                setText('footerContactPhoneText', phone);
+                setText('footerBottomPhoneText', phone);
+                setHref('contactBarPhone', `tel:${tel}`);
+                setHref('footerContactPhone', `tel:${tel}`);
+                setHref('footerBottomPhone', `tel:${tel}`);
+            }
+            if (email) {
+                setText('contactBarEmailText', email);
+                setText('footerContactEmailText', email);
+                setText('footerBottomEmailText', email);
+                setHref('contactBarEmail', `mailto:${email}`);
+                setHref('footerContactEmail', `mailto:${email}`);
+                setHref('footerBottomEmail', `mailto:${email}`);
+            }
+            if (address) {
+                setText('contactBarAddressText', address);
+                setText('footerContactAddressText', address);
+                setText('footerBottomAddressText', address);
+            }
+        }
+
+        function saveContactConfig() {
+            showToast('info', 'Contact', 'Enregistrement via le backend…');
+        }
+
         function saveRentConfig() {
             const amount = parseInt(document.getElementById('rentAmountInput').value);
             if (isNaN(amount) || amount < 1000) {
@@ -10069,6 +10207,16 @@ SCRIPT COMPLET
                         input.value = config.sponsorPrices[option];
                     }
                 });
+                const phone = typeof config.contactPhone === 'string' ? config.contactPhone.trim() : '';
+                const email = typeof config.contactEmail === 'string' ? config.contactEmail.trim() : '';
+                const address = typeof config.contactAddress === 'string' ? config.contactAddress.trim() : '';
+                const phoneInput = document.getElementById('contactPhoneInput');
+                const emailInput = document.getElementById('contactEmailInput');
+                const addressInput = document.getElementById('contactAddressInput');
+                if (phoneInput) phoneInput.value = phone;
+                if (emailInput) emailInput.value = email;
+                if (addressInput) addressInput.value = address;
+                applyContactDisplay({ phone, email, address });
             },
             setAuth({ profile, admin = false } = {}) {
                 currentUser = profile ? {
@@ -10169,7 +10317,7 @@ SCRIPT COMPLET
             'addProduct', 'deleteProduct', 'deleteProductFromDetail',
             'processPayment', 'submitSponsorship', 'approveShop', 'rejectShop',
             'toggleShopVisibility', 'toggleSponsor', 'markRentPaid',
-            'markRentUnpaid', 'verifyId', 'saveRentConfig', 'addAdBanner',
+            'markRentUnpaid', 'verifyId', 'saveRentConfig', 'saveContactConfig', 'addAdBanner',
             'removeAdBanner', 'addAgent', 'toggleAgent', 'deleteAgent',
             'saveSponsorPricing', 'removeLogo', 'createNewShop',
             'addCategorySponsor', 'toggleCategorySponsor', 'deleteCategorySponsor',

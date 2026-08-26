@@ -100,6 +100,30 @@ export function getNabooPayFeesCustomerSide(): boolean {
   return env("NABOOPAY_FEES_CUSTOMER_SIDE", "false").toLowerCase() === "true";
 }
 
+export function getSenePayApiKey(): string {
+  return env("SENEPAY_API_KEY");
+}
+
+export function getSenePayApiSecret(): string {
+  return env("SENEPAY_API_SECRET");
+}
+
+export function getSenePayWebhookSecret(): string {
+  return env("SENEPAY_WEBHOOK_SECRET");
+}
+
+export function getSenePayDefaultReturnUrl(): string {
+  return env("SENEPAY_DEFAULT_RETURN_URL");
+}
+
+export function getSenePayDefaultCancelUrl(): string {
+  return env("SENEPAY_DEFAULT_CANCEL_URL");
+}
+
+export function getSenePayWebhookUrl(): string {
+  return env("SENEPAY_WEBHOOK_URL");
+}
+
 export function getAdminEmail(): string {
   return env("ADMIN_EMAIL").toLowerCase();
 }

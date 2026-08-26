@@ -1,6 +1,11 @@
-import { ApiError } from "./errors.js";
+import { ApiError, requireCountry, type HandlerRequest } from "./errors.js";
 import type { Product, Shop, User, PlatformConfig as ConfigRow } from "@prisma/client";
 import { prisma } from "./prisma.js";
+import {
+  COUNTRY_CURRENCY,
+  DEFAULT_COUNTRY,
+  type PlatformCountry,
+} from "./country.js";
 import { toInternationalPhone } from "./payments/helpers.js";
 import { toPublicAssetUrl } from "./uploads.js";
 
@@ -21,17 +26,24 @@ export const DEFAULT_PLATFORM_CONFIG = {
   },
   currency: "XOF" as const,
   platformLogo: null as string | null,
+  contactPhone: "",
+  contactEmail: "",
+  contactAddress: "",
 };
 
 export type SponsorOption = keyof typeof DEFAULT_PLATFORM_CONFIG.sponsorPrices;
 
 export interface PlatformConfig {
+  countryCode: PlatformCountry;
   rentAmount: number;
   rentDurationDays: number;
   sponsorPrices: Record<SponsorOption, number>;
   sponsorDurations: Record<SponsorOption, number>;
-  currency: "XOF";
+  currency: "XOF" | "CDF";
   platformLogo: string | null;
+  contactPhone: string;
+  contactEmail: string;
+  contactAddress: string;
 }
 
 export function normalizeShopName(name: string): string {
@@ -44,9 +56,12 @@ export function normalizeShopName(name: string): string {
     .slice(0, 100);
 }
 
-export function normalizeWhatsApp(phone: string): string {
+export function normalizeWhatsApp(
+  phone: string,
+  countryCode: PlatformCountry = DEFAULT_COUNTRY,
+): string {
   try {
-    return toInternationalPhone(phone).slice(1);
+    return toInternationalPhone(phone, countryCode).slice(1);
   } catch {
     return phone.replace(/[^0-9]/g, "");
   }
@@ -189,6 +204,7 @@ export function serializeProfile(user: User | null): Record<string, unknown> | n
     phone: user.phone,
     email: user.email,
     role: user.role,
+    countryCode: user.countryCode,
     shopId: null,
     onboardingCompleted: user.onboardingCompleted,
     createdAt: toIso(user.createdAt),
@@ -196,15 +212,26 @@ export function serializeProfile(user: User | null): Record<string, unknown> | n
   };
 }
 
-export async function getPlatformConfig(): Promise<PlatformConfig> {
+export async function getPlatformConfig(
+  countryCode: PlatformCountry = DEFAULT_COUNTRY,
+): Promise<PlatformConfig> {
+  const currency = COUNTRY_CURRENCY[countryCode];
   const row =
-    (await prisma.platformConfig.findUnique({ where: { id: "config" } })) ??
-    (await prisma.platformConfig.create({ data: { id: "config" } }));
+    (await prisma.platformConfig.findUnique({ where: { id: countryCode } })) ??
+    (await prisma.platformConfig.create({
+      data: {
+        id: countryCode,
+        countryCode,
+        currency,
+      },
+    }));
   return fromConfigRow(row);
 }
 
 export function fromConfigRow(row: ConfigRow): PlatformConfig {
+  const countryCode = (row.countryCode || row.id || DEFAULT_COUNTRY) as PlatformCountry;
   return {
+    countryCode,
     rentAmount: row.rentAmount,
     rentDurationDays: row.rentDurationDays,
     sponsorPrices: {
@@ -214,8 +241,11 @@ export function fromConfigRow(row: ConfigRow): PlatformConfig {
       "60days": row.sponsorPrice60,
     },
     sponsorDurations: { ...DEFAULT_PLATFORM_CONFIG.sponsorDurations },
-    currency: "XOF",
+    currency: (row.currency === "CDF" ? "CDF" : "XOF") as "XOF" | "CDF",
     platformLogo: row.platformLogo ? toPublicAssetUrl(row.platformLogo) : row.platformLogo,
+    contactPhone: row.contactPhone ?? "",
+    contactEmail: row.contactEmail ?? "",
+    contactAddress: row.contactAddress ?? "",
   };
 }
 
@@ -314,4 +344,8 @@ export async function assertShopOwner(uid: string, shopId: string): Promise<Shop
     throw new ApiError("permission-denied", "You do not own this shop.");
   }
   return shop;
+}
+
+export function countryFromRequest(request: HandlerRequest): PlatformCountry {
+  return requireCountry(request);
 }

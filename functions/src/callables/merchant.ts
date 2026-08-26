@@ -1,4 +1,4 @@
-import { ApiError, asApiError, parseInput, requireAuth, type HandlerRequest } from "../errors.js";
+import { ApiError, asApiError, parseInput, requireAuth, requireCountry, type HandlerRequest } from "../errors.js";
 import {
   deleteProductSchema,
   emptySchema,
@@ -20,10 +20,18 @@ import {
 } from "../data.js";
 import { toPublicAssetUrl } from "../uploads.js";
 
-async function validateAgentCode(agentCode: string | null | undefined): Promise<void> {
+async function validateAgentCode(
+  agentCode: string | null | undefined,
+  countryCode: string,
+): Promise<void> {
   if (!agentCode) return;
   const agent = await prisma.agent.findUnique({
-    where: { code: agentCode.toUpperCase() },
+    where: {
+      countryCode_code: {
+        countryCode,
+        code: agentCode.toUpperCase(),
+      },
+    },
   });
   if (!agent?.active) {
     throw new ApiError("invalid-argument", "The commercial agent code is invalid or inactive.");
@@ -33,6 +41,7 @@ async function validateAgentCode(agentCode: string | null | undefined): Promise<
 export async function completeMerchantProfile(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(merchantProfileSchema, request.data);
     if (!validateIdentityPath(auth.uid, input.shop.idCardPath)) {
       throw new ApiError(
@@ -40,7 +49,7 @@ export async function completeMerchantProfile(request: HandlerRequest) {
         `idCardPath must be inside identity/${auth.uid}/.`,
       );
     }
-    await validateAgentCode(input.shop.agentCode);
+    await validateAgentCode(input.shop.agentCode, countryCode);
 
     const existing = await prisma.shop.findUnique({ where: { ownerId: auth.uid } });
     if (existing && !existing.deletedAt) {
@@ -61,7 +70,7 @@ export async function completeMerchantProfile(request: HandlerRequest) {
       category: input.shop.category,
       description: input.shop.description,
       phone: input.shop.phone,
-      whatsapp: input.shop.whatsapp ?? normalizeWhatsApp(input.shop.phone),
+      whatsapp: input.shop.whatsapp ?? normalizeWhatsApp(input.shop.phone, countryCode),
       email: input.shop.email ?? auth.email,
       logo: input.shop.logo ?? input.shop.name.charAt(0).toUpperCase(),
       icon: input.shop.icon ?? "fa-store",
@@ -69,6 +78,7 @@ export async function completeMerchantProfile(request: HandlerRequest) {
       idCardPath: input.shop.idCardPath,
       openingFor: input.shop.openingFor,
       agentCode: input.shop.agentCode?.toUpperCase() ?? null,
+      countryCode,
       deletedAt: null,
       approvalStatus: "pending",
       approved: false,
@@ -77,7 +87,12 @@ export async function completeMerchantProfile(request: HandlerRequest) {
 
     const shop = await prisma.$transaction(async (tx) => {
       const taken = await tx.shop.findUnique({
-        where: { nameNormalized: normalizedName },
+        where: {
+          countryCode_nameNormalized: {
+            countryCode,
+            nameNormalized: normalizedName,
+          },
+        },
       });
       if (taken && taken.ownerId !== auth.uid && !taken.deletedAt) {
         throw new ApiError("already-exists", "This shop name is already in use.");
@@ -128,20 +143,31 @@ export async function getMyAccount(request: HandlerRequest) {
 export async function updateMyShop(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(updateShopSchema, request.data);
     const shop = await assertShopOwner(auth.uid, input.shopId);
+    if (shop.countryCode !== countryCode) {
+      throw new ApiError("not-found", "Shop not found.");
+    }
     const data: Record<string, unknown> = {};
     for (const key of ["category", "description", "phone", "email", "whatsapp", "facade", "logo", "icon"] as const) {
       if (input[key] !== undefined) data[key] = input[key];
     }
     if (typeof data.facade === "string") data.facade = toPublicAssetUrl(data.facade);
     if (input.phone !== undefined && input.whatsapp === undefined) {
-      data.whatsapp = normalizeWhatsApp(input.phone);
+      data.whatsapp = normalizeWhatsApp(input.phone, countryCode);
     }
     if (input.name !== undefined && input.name !== shop.name) {
       const newNormalized = normalizeShopName(input.name);
       if (!newNormalized) throw new ApiError("invalid-argument", "The shop name is invalid.");
-      const taken = await prisma.shop.findUnique({ where: { nameNormalized: newNormalized } });
+      const taken = await prisma.shop.findUnique({
+        where: {
+          countryCode_nameNormalized: {
+            countryCode,
+            nameNormalized: newNormalized,
+          },
+        },
+      });
       if (taken && taken.id !== shop.id && !taken.deletedAt) {
         throw new ApiError("already-exists", "This shop name is already in use.");
       }

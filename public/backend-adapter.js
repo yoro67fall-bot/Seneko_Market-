@@ -71,8 +71,16 @@ function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-async function loadApiUrl() {
-  if (window.SENEKO_API_URL) return String(window.SENEKO_API_URL).replace(/\/$/, "");
+async function loadPlatformConfig() {
+  if (window.SENEKO_API_URL) {
+    return {
+      apiUrl: String(window.SENEKO_API_URL).replace(/\/$/, ""),
+      country: window.SENEKO_COUNTRY || "SN",
+      countryName: window.SENEKO_COUNTRY_NAME || "Sénégal",
+      flagUrl: window.SENEKO_FLAG_URL || "/flags/sn.svg",
+      theme: window.SENEKO_THEME || null
+    };
+  }
   try {
     const response = await fetch("/api-config.json", {
       headers: { Accept: "application/json" },
@@ -80,12 +88,53 @@ async function loadApiUrl() {
     });
     if (response.ok) {
       const data = await response.json();
-      if (data?.apiUrl) return String(data.apiUrl).replace(/\/$/, "");
+      return {
+        apiUrl: data?.apiUrl ? String(data.apiUrl).replace(/\/$/, "") : "",
+        country: String(data?.country || "SN").toUpperCase(),
+        countryName: data?.countryName || "",
+        flagUrl: data?.flagUrl || "",
+        theme: data?.theme || null
+      };
     }
   } catch {
     /* fall through */
   }
-  return "";
+  return { apiUrl: "", country: "SN", countryName: "Sénégal", flagUrl: "/flags/sn.svg", theme: null };
+}
+
+function applyTheme(theme) {
+  if (!theme || typeof theme !== "object") return;
+  const root = document.documentElement;
+  if (theme.primary) root.style.setProperty("--primary", theme.primary);
+  if (theme.primaryDark) root.style.setProperty("--primary-dark", theme.primaryDark);
+  if (theme.primaryLight) root.style.setProperty("--primary-light", theme.primaryLight);
+  if (theme.primary && theme.primaryDark) {
+    root.style.setProperty(
+      "--primary-gradient",
+      `linear-gradient(135deg, ${theme.primary}, ${theme.primaryDark})`
+    );
+  } else if (theme.primary) {
+    root.style.setProperty(
+      "--primary-gradient",
+      `linear-gradient(135deg, ${theme.primary}, ${theme.primary})`
+    );
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta && theme.primary) meta.setAttribute("content", theme.primary);
+}
+
+function applyCountryFlag({ flagUrl, countryName, country }) {
+  const badge = document.getElementById("countryFlagBadge");
+  const img = document.getElementById("countryFlagImg");
+  document.documentElement.setAttribute("data-country", country || "SN");
+  if (!badge || !img || !flagUrl) {
+    if (badge) badge.style.display = "none";
+    return;
+  }
+  img.src = flagUrl;
+  img.alt = countryName ? `Drapeau du ${countryName}` : `Drapeau ${country || ""}`;
+  badge.style.display = "flex";
+  badge.setAttribute("aria-label", countryName || country || "Pays");
 }
 
 function hideSocialLogin() {
@@ -96,10 +145,18 @@ function hideSocialLogin() {
 
 async function initializeBackend() {
   try {
-    const apiUrl = await loadApiUrl();
-    services = { apiUrl };
+    const platform = await loadPlatformConfig();
+    services = {
+      apiUrl: platform.apiUrl,
+      country: platform.country || "SN",
+      countryName: platform.countryName || "",
+      flagUrl: platform.flagUrl || "",
+      theme: platform.theme
+    };
+    applyTheme(platform.theme);
+    applyCountryFlag(platform);
     hideSocialLogin();
-    if (!apiUrl) {
+    if (!platform.apiUrl) {
       toast(
         "warning",
         "API non configurée",
@@ -132,7 +189,9 @@ async function apiFetch(path, { method = "POST", body, formData } = {}) {
   if (!services?.apiUrl) {
     throw new Error("URL de l'API manquante. Définissez apiUrl dans /api-config.json (Railway).");
   }
-  const headers = {};
+  const headers = {
+    "X-Platform-Country": services.country || "SN"
+  };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   if (!formData && method !== "GET") headers["Content-Type"] = "application/json";
@@ -687,6 +746,7 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${auth}`,
+        "X-Platform-Country": services?.country || "SN",
       },
       body: JSON.stringify(payload),
     });
@@ -1001,6 +1061,22 @@ window.saveRentConfig = () => runAction(async () => {
   await backend("adminSetRentConfig", { rentAmount });
   await refreshCurrentData();
   toast("success", "✅ Loyer configuré", `Le loyer mensuel est maintenant de ${rentAmount.toLocaleString("fr-FR")} F.`);
+}, "Configuration impossible");
+
+window.saveContactConfig = () => runAction(async () => {
+  const contactPhone = String(document.getElementById("contactPhoneInput")?.value || "").trim();
+  const contactEmail = String(document.getElementById("contactEmailInput")?.value || "").trim();
+  const contactAddress = String(document.getElementById("contactAddressInput")?.value || "").trim();
+  if (!contactPhone && !contactEmail && !contactAddress) {
+    throw new Error("Renseignez au moins un champ de contact.");
+  }
+  await backend("adminSetPlatformBranding", {
+    contactPhone,
+    contactEmail,
+    contactAddress
+  });
+  await refreshCurrentData();
+  toast("success", "✅ Contacts enregistrés", "Les informations de contact ont été mises à jour.");
 }, "Configuration impossible");
 
 window.saveSponsorPricing = () => runAction(async () => {

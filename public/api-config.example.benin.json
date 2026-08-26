@@ -1,0 +1,12 @@
+{
+  "apiUrl": "https://YOUR-RAILWAY-SERVICE.up.railway.app",
+  "country": "BJ",
+  "countryName": "Bénin",
+  "flagUrl": "/flags/bj.svg",
+  "theme": {
+    "primary": "#008751",
+    "primaryDark": "#006B40",
+    "primaryLight": "rgba(0, 135, 81, 0.08)",
+    "accent": "#FCD116"
+  }
+}

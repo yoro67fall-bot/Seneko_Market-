@@ -63,12 +63,20 @@ export async function applyVerifiedPayment(
   status: PaymentStatus,
   extras: { failReason?: string | null; raw?: unknown } = {},
 ): Promise<Payment> {
-  const config = await getPlatformConfig();
   await prisma.$transaction(async (tx) => {
-    const payment = await tx.payment.findUnique({ where: { id: paymentId } });
+    const payment = await tx.payment.findUnique({
+      where: { id: paymentId },
+      include: { shop: true },
+    });
     if (!payment) {
       throw new ApiError("not-found", "Payment not found.");
     }
+    const countryCode = (payment.shop.countryCode || "SN") as
+      | "SN"
+      | "BJ"
+      | "TG"
+      | "CD";
+    const config = await getPlatformConfig(countryCode);
     const current = asPayment(payment);
     if (current.status === "completed" && current.appliedAt) {
       return;

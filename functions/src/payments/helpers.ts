@@ -1,4 +1,8 @@
 import { createHmac, createHash, timingSafeEqual } from "node:crypto";
+import {
+  COUNTRY_PHONE_DIAL,
+  type PlatformCountry,
+} from "../country.js";
 
 export type JsonRecord = Record<string, unknown>;
 export type PaymentPurpose = "rent" | "sponsor";
@@ -89,22 +93,60 @@ export function mapPaymentMethod(
   return "bank";
 }
 
-export function toInternationalPhone(phone: string): string {
+export function toInternationalPhone(
+  phone: string,
+  countryCode: PlatformCountry = "SN",
+): string {
+  const dial = COUNTRY_PHONE_DIAL[countryCode];
   const digits = phone.replace(/[^0-9]/g, "");
   if (!digits) throw new Error("A payer phone number is required.");
   let normalized = digits;
-  if (normalized.startsWith("221") && normalized.length >= 12) {
-    normalized = normalized.slice(0, 12);
-  } else if (normalized.length === 9 && /^7/.test(normalized)) {
-    normalized = `221${normalized}`;
+  if (normalized.startsWith(dial) && normalized.length >= dial.length + 8) {
+    normalized = normalized.slice(0, Math.min(normalized.length, dial.length + 10));
+  } else if (normalized.length === 9) {
+    normalized = `${dial}${normalized}`;
   } else if (normalized.length === 10 && normalized.startsWith("0")) {
-    normalized = `221${normalized.slice(1)}`;
+    normalized = `${dial}${normalized.slice(1)}`;
   }
   const international = `+${normalized}`;
-  if (!/^\+2217\d{8}$/.test(international)) {
-    throw new Error("A valid Senegal mobile number is required.");
+  const patterns: Record<PlatformCountry, RegExp> = {
+    SN: /^\+2217\d{8}$/,
+    BJ: /^\+229\d{8,10}$/,
+    TG: /^\+228\d{8,10}$/,
+    CD: /^\+243\d{8,10}$/,
+  };
+  if (!patterns[countryCode].test(international)) {
+    throw new Error(`A valid ${countryCode} mobile number is required.`);
   }
   return international;
+}
+
+export function normalizeSenePayStatus(value: unknown): PaymentStatus {
+  if (typeof value !== "string") throw new Error("Missing payment status.");
+  switch (value.trim()) {
+    case "Open":
+    case "Processing":
+      return "pending";
+    case "Complete":
+      return "completed";
+    case "Failed":
+    case "Expired":
+      return "failed";
+    case "Cancelled":
+    case "Canceled":
+      return "canceled";
+    default:
+      throw new Error("Unknown payment status.");
+  }
+}
+
+export function verifySenePaySignature(
+  rawBody: string,
+  signature: string | undefined,
+  secret: string,
+): boolean {
+  if (!signature || !secret) return false;
+  return constantTimeHexEqual(hmacSha256Hex(secret, rawBody), signature.trim());
 }
 
 export function parseAllowedOrigins(raw: string): string[] {
