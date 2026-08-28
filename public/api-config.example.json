@@ -2,11 +2,5 @@
   "apiUrl": "https://YOUR-RAILWAY-SERVICE.up.railway.app",
   "country": "SN",
   "countryName": "Sénégal",
-  "flagUrl": "/flags/sn.svg",
-  "theme": {
-    "primary": "#6C3CE1",
-    "primaryDark": "#5A2FC7",
-    "primaryLight": "rgba(108, 60, 225, 0.08)",
-    "accent": "#F59E0B"
-  }
+  "flagUrl": "/flags/sn.svg"
 }

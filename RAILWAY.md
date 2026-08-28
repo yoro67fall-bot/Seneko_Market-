@@ -3,7 +3,7 @@
 There is no Firebase. Railway runs the API, Postgres, uploads, NabooPay (Senegal), and SenePay (Benin / Togo / DRC).
 Netlify serves the static UI in `public/`.
 
-One shared Railway backend can serve **four country frontends**. Each Netlify site sets its own `api-config.json` with `country`, theme colors, and flag.
+One shared Railway backend can serve **four country frontends**. Each Netlify site sets its own `api-config.json` with `country` and `flagUrl`. All sites share the same Seneko green/orange brand palette defined in `public/index.html`; only the navbar flag differs per country.
 
 ## 1. Railway
 
@@ -98,7 +98,7 @@ In Admin → **Informations de contact**, set phone, email, and physical address
 
 ### Country flag
 
-The navbar shows the flag from `flagUrl` (assets in `public/flags/`: `sn.svg`, `bj.svg`, `tg.svg`, `cd.svg`).
+The navbar shows the flag from `flagUrl` (assets in `public/flags/`: `sn.svg`, `bj.svg`, `tg.svg`, `cd.svg`). Colors and styling are identical on every country site.
 
 ## 4. Provider behavior
 

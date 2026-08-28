@@ -77,8 +77,7 @@ async function loadPlatformConfig() {
       apiUrl: String(window.SENEKO_API_URL).replace(/\/$/, ""),
       country: window.SENEKO_COUNTRY || "SN",
       countryName: window.SENEKO_COUNTRY_NAME || "Sénégal",
-      flagUrl: window.SENEKO_FLAG_URL || "/flags/sn.svg",
-      theme: window.SENEKO_THEME || null
+      flagUrl: window.SENEKO_FLAG_URL || "/flags/sn.svg"
     };
   }
   try {
@@ -92,35 +91,17 @@ async function loadPlatformConfig() {
         apiUrl: data?.apiUrl ? String(data.apiUrl).replace(/\/$/, "") : "",
         country: String(data?.country || "SN").toUpperCase(),
         countryName: data?.countryName || "",
-        flagUrl: data?.flagUrl || "",
-        theme: data?.theme || null
+        flagUrl: data?.flagUrl || ""
       };
     }
   } catch {
     /* fall through */
   }
-  return { apiUrl: "", country: "SN", countryName: "Sénégal", flagUrl: "/flags/sn.svg", theme: null };
+  return { apiUrl: "", country: "SN", countryName: "Sénégal", flagUrl: "/flags/sn.svg" };
 }
 
-function applyTheme(theme) {
-  if (!theme || typeof theme !== "object") return;
-  const root = document.documentElement;
-  if (theme.primary) root.style.setProperty("--primary", theme.primary);
-  if (theme.primaryDark) root.style.setProperty("--primary-dark", theme.primaryDark);
-  if (theme.primaryLight) root.style.setProperty("--primary-light", theme.primaryLight);
-  if (theme.primary && theme.primaryDark) {
-    root.style.setProperty(
-      "--primary-gradient",
-      `linear-gradient(135deg, ${theme.primary}, ${theme.primaryDark})`
-    );
-  } else if (theme.primary) {
-    root.style.setProperty(
-      "--primary-gradient",
-      `linear-gradient(135deg, ${theme.primary}, ${theme.primary})`
-    );
-  }
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta && theme.primary) meta.setAttribute("content", theme.primary);
+function applyTheme() {
+  /* Palette is unified in CSS (:root); per-country theme overrides are disabled. */
 }
 
 function applyCountryFlag({ flagUrl, countryName, country }) {
@@ -150,10 +131,9 @@ async function initializeBackend() {
       apiUrl: platform.apiUrl,
       country: platform.country || "SN",
       countryName: platform.countryName || "",
-      flagUrl: platform.flagUrl || "",
-      theme: platform.theme
+      flagUrl: platform.flagUrl || ""
     };
-    applyTheme(platform.theme);
+    applyTheme();
     applyCountryFlag(platform);
     hideSocialLogin();
     if (!platform.apiUrl) {

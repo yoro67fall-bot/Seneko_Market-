@@ -2,11 +2,5 @@
   "apiUrl": "https://YOUR-RAILWAY-SERVICE.up.railway.app",
   "country": "CD",
   "countryName": "RDC",
-  "flagUrl": "/flags/cd.svg",
-  "theme": {
-    "primary": "#007FFF",
-    "primaryDark": "#005FCC",
-    "primaryLight": "rgba(0, 127, 255, 0.08)",
-    "accent": "#F7D618"
-  }
+  "flagUrl": "/flags/cd.svg"
 }

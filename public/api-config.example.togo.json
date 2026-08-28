@@ -2,11 +2,5 @@
   "apiUrl": "https://YOUR-RAILWAY-SERVICE.up.railway.app",
   "country": "TG",
   "countryName": "Togo",
-  "flagUrl": "/flags/tg.svg",
-  "theme": {
-    "primary": "#006A4E",
-    "primaryDark": "#004D38",
-    "primaryLight": "rgba(0, 106, 78, 0.08)",
-    "accent": "#FFCE00"
-  }
+  "flagUrl": "/flags/tg.svg"
 }
