@@ -1,4 +1,5 @@
 [build]
+  command = "node scripts/netlify-prepare-config.js"
   publish = "public"
 
 [functions]
