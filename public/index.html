@@ -312,10 +312,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            gap: 0.4rem;
             flex-shrink: 0;
             height: 28px;
             width: auto;
             margin: 0 0.35rem;
+            padding: 0 0.45rem 0 0.15rem;
             border-radius: 6px;
             overflow: hidden;
             border: 1px solid var(--border-color);
@@ -325,20 +327,34 @@
 
         .country-flag-badge img {
             display: block;
-            height: 28px;
+            height: 22px;
             width: auto;
-            max-width: 42px;
+            max-width: 36px;
             object-fit: cover;
+            border-radius: 3px;
+        }
+
+        .country-flag-badge .country-flag-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            white-space: nowrap;
+            line-height: 1;
         }
 
         @media (min-width: 768px) {
             .country-flag-badge {
                 height: 34px;
                 margin: 0 0.6rem;
+                padding: 0 0.55rem 0 0.2rem;
+                gap: 0.5rem;
             }
             .country-flag-badge img {
-                height: 34px;
-                max-width: 52px;
+                height: 26px;
+                max-width: 44px;
+            }
+            .country-flag-badge .country-flag-label {
+                font-size: 0.8rem;
             }
         }
 
@@ -5055,6 +5071,7 @@
                 </a>
                 <div class="country-flag-badge" id="countryFlagBadge" aria-label="Pays" style="display:none;">
                     <img id="countryFlagImg" src="" alt="">
+                    <span class="country-flag-label" id="countryFlagLabel"></span>
                 </div>
             </div>
 
@@ -5866,8 +5883,8 @@
 
             <!-- Informations de contact -->
             <div class="admin-contact-config">
-                <h3><i class="fas fa-address-card"></i> Informations de contact</h3>
-                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Téléphone, email et adresse affichés sur la plateforme (modifiable par pays).</p>
+                <h3><i class="fas fa-address-card"></i> Informations de contact <span id="adminContactCountryLabel" style="color:var(--secondary);font-weight:700;"></span></h3>
+                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Téléphone, email et adresse affichés sur <strong>cette plateforme uniquement</strong> (chaque pays a ses propres contacts). Connectez-vous en admin sur le site Bénin / Togo / RDC pour les modifier.</p>
                 <div class="contact-config-row">
                     <label for="contactPhoneInput">Téléphone</label>
                     <input type="text" id="contactPhoneInput" placeholder="+229 01 23 45 67">
@@ -10339,7 +10356,6 @@ SCRIPT COMPLET
         categorySponsorsData = [];
         window.SenekoUI.renderPublic();
     </script>
-    <script>window.SENEKO_API_URL = "https://senekomarket-production.up.railway.app";</script>
     <script src="/backend-adapter.js"></script>
 
 </body>

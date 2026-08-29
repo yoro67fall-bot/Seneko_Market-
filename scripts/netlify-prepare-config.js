@@ -34,6 +34,7 @@ const config = {
   flagUrl: process.env.FLAG_URL || defaults[country].flagUrl
 };
 
-const out = path.join(__dirname, "..", "public", "api-config.json");
-fs.writeFileSync(out, JSON.stringify(config, null, 2) + "\n");
+const publicDir = path.join(__dirname, "..", "public");
+const outJson = path.join(publicDir, "api-config.json");
+fs.writeFileSync(outJson, JSON.stringify(config, null, 2) + "\n");
 console.log("Wrote api-config.json:", config);

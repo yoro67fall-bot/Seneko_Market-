@@ -72,32 +72,45 @@ function clearToken() {
 }
 
 async function loadPlatformConfig() {
-  if (window.SENEKO_API_URL) {
-    return {
-      apiUrl: String(window.SENEKO_API_URL).replace(/\/$/, ""),
-      country: window.SENEKO_COUNTRY || "SN",
-      countryName: window.SENEKO_COUNTRY_NAME || "Sénégal",
-      flagUrl: window.SENEKO_FLAG_URL || "/flags/sn.svg"
-    };
-  }
+  let fromFile = null;
   try {
     const response = await fetch("/api-config.json", {
       headers: { Accept: "application/json" },
       cache: "no-store"
     });
     if (response.ok) {
-      const data = await response.json();
-      return {
-        apiUrl: data?.apiUrl ? String(data.apiUrl).replace(/\/$/, "") : "",
-        country: String(data?.country || "SN").toUpperCase(),
-        countryName: data?.countryName || "",
-        flagUrl: data?.flagUrl || ""
-      };
+      const contentType = String(response.headers.get("content-type") || "");
+      if (contentType.includes("application/json") || contentType.includes("text/json") || !contentType) {
+        const data = await response.json();
+        if (data && typeof data === "object") {
+          fromFile = {
+            apiUrl: data?.apiUrl ? String(data.apiUrl).replace(/\/$/, "") : "",
+            country: String(data?.country || "").toUpperCase(),
+            countryName: data?.countryName || "",
+            flagUrl: data?.flagUrl || ""
+          };
+        }
+      }
     }
   } catch {
     /* fall through */
   }
-  return { apiUrl: "", country: "SN", countryName: "Sénégal", flagUrl: "/flags/sn.svg" };
+
+  const country = String(window.SENEKO_COUNTRY || fromFile?.country || "SN").toUpperCase();
+  const countryDefaults = {
+    SN: { countryName: "Sénégal", flagUrl: "/flags/sn.svg" },
+    BJ: { countryName: "Bénin", flagUrl: "/flags/bj.svg" },
+    TG: { countryName: "Togo", flagUrl: "/flags/tg.svg" },
+    CD: { countryName: "RDC", flagUrl: "/flags/cd.svg" }
+  };
+  const defaults = countryDefaults[country] || countryDefaults.SN;
+
+  return {
+    apiUrl: String(window.SENEKO_API_URL || fromFile?.apiUrl || "").replace(/\/$/, ""),
+    country,
+    countryName: window.SENEKO_COUNTRY_NAME || fromFile?.countryName || defaults.countryName,
+    flagUrl: window.SENEKO_FLAG_URL || fromFile?.flagUrl || defaults.flagUrl
+  };
 }
 
 function applyTheme() {
@@ -107,6 +120,7 @@ function applyTheme() {
 function applyCountryFlag({ flagUrl, countryName, country }) {
   const badge = document.getElementById("countryFlagBadge");
   const img = document.getElementById("countryFlagImg");
+  const label = document.getElementById("countryFlagLabel");
   document.documentElement.setAttribute("data-country", country || "SN");
   if (!badge || !img || !flagUrl) {
     if (badge) badge.style.display = "none";
@@ -114,8 +128,14 @@ function applyCountryFlag({ flagUrl, countryName, country }) {
   }
   img.src = flagUrl;
   img.alt = countryName ? `Drapeau du ${countryName}` : `Drapeau ${country || ""}`;
+  if (label) label.textContent = countryName || country || "";
   badge.style.display = "flex";
   badge.setAttribute("aria-label", countryName || country || "Pays");
+
+  const contactCountry = document.getElementById("adminContactCountryLabel");
+  if (contactCountry) {
+    contactCountry.textContent = countryName || country || "";
+  }
 }
 
 function hideSocialLogin() {
