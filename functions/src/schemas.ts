@@ -56,6 +56,23 @@ export const loginSchema = z
   })
   .strict();
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(200),
+    newPassword: z.string().min(8).max(200),
+    confirmPassword: z.string().min(8).max(200),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.newPassword !== value.confirmPassword) {
+      context.addIssue({
+        code: "custom",
+        path: ["confirmPassword"],
+        message: "Les mots de passe ne correspondent pas.",
+      });
+    }
+  });
+
 export const bootstrapPublicSchema = z
   .object({
     shopId: z.string().trim().min(1).max(128).optional(),
@@ -326,6 +343,11 @@ export const adminBrandingSchema = z
       .union([z.literal(""), z.string().trim().email().max(160)])
       .optional(),
     contactAddress: z.string().trim().max(300).optional(),
+    socialFacebook: z.union([z.literal(""), z.string().trim().url().max(500)]).optional(),
+    socialInstagram: z.union([z.literal(""), z.string().trim().url().max(500)]).optional(),
+    socialTwitter: z.union([z.literal(""), z.string().trim().url().max(500)]).optional(),
+    socialWhatsapp: z.union([z.literal(""), z.string().trim().url().max(500)]).optional(),
+    socialTiktok: z.union([z.literal(""), z.string().trim().url().max(500)]).optional(),
   })
   .strict();
 

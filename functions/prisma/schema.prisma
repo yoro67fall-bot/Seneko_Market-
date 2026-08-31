@@ -231,6 +231,11 @@ model PlatformConfig {
   contactPhone     String   @default("")
   contactEmail     String   @default("")
   contactAddress   String   @default("")
+  socialFacebook   String   @default("")
+  socialInstagram  String   @default("")
+  socialTwitter    String   @default("")
+  socialWhatsapp   String   @default("")
+  socialTiktok     String   @default("")
   updatedBy        String?
   updatedAt        DateTime @updatedAt
 }

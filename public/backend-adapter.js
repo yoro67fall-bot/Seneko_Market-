@@ -1,6 +1,6 @@
 const ui = window.SenekoUI;
 const clientIds = new Map();
-const TOKEN_KEY = "senekoJwt";
+let storageCountry = "SN";
 let services = null;
 let publicSnapshot = [];
 let categoryBannersSnapshot = [];
@@ -55,20 +55,60 @@ async function runAction(action, title = "Erreur") {
   }
 }
 
+function getStorageCountry() {
+  return String(services?.country || storageCountry || "SN").toUpperCase();
+}
+
+function storageKey(name) {
+  return `seneko_${getStorageCountry()}_${name}`;
+}
+
 function getToken() {
-  return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || "";
+  const key = storageKey("jwt");
+  const token = sessionStorage.getItem(key) || localStorage.getItem(key) || "";
+  if (token) return token;
+  return sessionStorage.getItem("senekoJwt") || localStorage.getItem("senekoJwt") || "";
 }
 
 function saveToken(token, remember) {
-  sessionStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(TOKEN_KEY);
+  const key = storageKey("jwt");
+  sessionStorage.removeItem(key);
+  localStorage.removeItem(key);
+  sessionStorage.removeItem("senekoJwt");
+  localStorage.removeItem("senekoJwt");
   const store = remember === false ? sessionStorage : localStorage;
-  store.setItem(TOKEN_KEY, token);
+  store.setItem(key, token);
 }
 
 function clearToken() {
-  sessionStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(TOKEN_KEY);
+  const key = storageKey("jwt");
+  sessionStorage.removeItem(key);
+  localStorage.removeItem(key);
+  sessionStorage.removeItem("senekoJwt");
+  localStorage.removeItem("senekoJwt");
+}
+
+function getPendingPaymentKey() {
+  return storageKey("pendingPayment");
+}
+
+function savePendingPayment(payload) {
+  localStorage.setItem(getPendingPaymentKey(), JSON.stringify(payload));
+}
+
+function loadPendingPayment() {
+  try {
+    const scoped = JSON.parse(localStorage.getItem(getPendingPaymentKey()) || "null");
+    if (scoped) return scoped;
+    return JSON.parse(localStorage.getItem("senekoPendingPayment") || "null");
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingPayment() {
+  localStorage.removeItem(getPendingPaymentKey());
+  localStorage.removeItem("senekoPendingPayment");
 }
 
 async function loadPlatformConfig() {
@@ -147,6 +187,7 @@ function hideSocialLogin() {
 async function initializeBackend() {
   try {
     const platform = await loadPlatformConfig();
+    storageCountry = platform.country || "SN";
     services = {
       apiUrl: platform.apiUrl,
       country: platform.country || "SN",
@@ -781,11 +822,11 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
     // Local and legacy fallback: call Railway callable directly.
     result = await backend("createPayment", payload);
   }
-  localStorage.setItem("senekoPendingPayment", JSON.stringify({
+  savePendingPayment({
     paymentId: result.paymentId,
     purpose,
     createdAt: Date.now()
-  }));
+  });
   if (!result.checkoutUrl) throw new Error("Le prestataire de paiement n'a pas renvoyé de lien de paiement.");
   location.assign(result.checkoutUrl);
 }
@@ -821,19 +862,14 @@ async function handlePaymentReturn() {
   const params = new URLSearchParams(location.search);
   if (!params.has("payment_return") && !params.has("token")) return;
   paymentReturnHandled = true;
-  let pending = null;
-  try {
-    pending = JSON.parse(localStorage.getItem("senekoPendingPayment") || "null");
-  } catch {
-    pending = null;
-  }
+  let pending = loadPendingPayment();
   if (!pending?.paymentId) {
     toast("warning", "Paiement en cours", "Le paiement sera mis à jour dès réception de la confirmation NabooPay.");
     return;
   }
   const status = await backend("getPaymentStatus", { paymentId: pending.paymentId });
   if (status.status === "completed") {
-    localStorage.removeItem("senekoPendingPayment");
+    clearPendingPayment();
     await refreshCurrentData();
     toast(
       "success",
@@ -841,7 +877,7 @@ async function handlePaymentReturn() {
       status.purpose === "sponsor" ? "Votre sponsoring est maintenant actif." : "Votre loyer est maintenant à jour."
     );
   } else if (["cancelled", "canceled", "failed"].includes(status.status)) {
-    localStorage.removeItem("senekoPendingPayment");
+    clearPendingPayment();
     toast("error", "Paiement non terminé", "Le paiement a été annulé ou refusé.");
   } else {
     toast("info", "Paiement en attente", "Confirmez le paiement sur votre téléphone. Le statut sera mis à jour automatiquement.");
@@ -1286,20 +1322,55 @@ window.saveRentConfig = () => runAction(async () => {
   toast("success", "✅ Loyer configuré", `Le loyer mensuel est maintenant de ${rentAmount.toLocaleString("fr-FR")} F.`);
 }, "Configuration impossible");
 
+window.changeAdminPassword = () => runAction(async () => {
+  const currentPassword = String(document.getElementById("adminCurrentPasswordInput")?.value || "");
+  const newPassword = String(document.getElementById("adminNewPasswordInput")?.value || "");
+  const confirmPassword = String(document.getElementById("adminConfirmPasswordInput")?.value || "");
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    throw new Error("Veuillez remplir tous les champs.");
+  }
+  if (newPassword.length < 8) {
+    throw new Error("Le nouveau mot de passe doit contenir au moins 8 caractères.");
+  }
+  if (newPassword !== confirmPassword) {
+    throw new Error("Les mots de passe ne correspondent pas.");
+  }
+  await backend("adminChangePassword", {
+    currentPassword,
+    newPassword,
+    confirmPassword
+  });
+  document.getElementById("adminCurrentPasswordInput").value = "";
+  document.getElementById("adminNewPasswordInput").value = "";
+  document.getElementById("adminConfirmPasswordInput").value = "";
+  toast("success", "✅ Mot de passe modifié", "Votre mot de passe administrateur a été mis à jour.");
+}, "Changement impossible");
+
 window.saveContactConfig = () => runAction(async () => {
   const contactPhone = String(document.getElementById("contactPhoneInput")?.value || "").trim();
   const contactEmail = String(document.getElementById("contactEmailInput")?.value || "").trim();
   const contactAddress = String(document.getElementById("contactAddressInput")?.value || "").trim();
-  if (!contactPhone && !contactEmail && !contactAddress) {
-    throw new Error("Renseignez au moins un champ de contact.");
+  const socialFacebook = String(document.getElementById("socialFacebookInput")?.value || "").trim();
+  const socialInstagram = String(document.getElementById("socialInstagramInput")?.value || "").trim();
+  const socialTwitter = String(document.getElementById("socialTwitterInput")?.value || "").trim();
+  const socialWhatsapp = String(document.getElementById("socialWhatsappInput")?.value || "").trim();
+  const socialTiktok = String(document.getElementById("socialTiktokInput")?.value || "").trim();
+  if (!contactPhone && !contactEmail && !contactAddress &&
+      !socialFacebook && !socialInstagram && !socialTwitter && !socialWhatsapp && !socialTiktok) {
+    throw new Error("Renseignez au moins un champ de contact ou un lien social.");
   }
   await backend("adminSetPlatformBranding", {
     contactPhone,
     contactEmail,
-    contactAddress
+    contactAddress,
+    socialFacebook,
+    socialInstagram,
+    socialTwitter,
+    socialWhatsapp,
+    socialTiktok
   });
   await refreshCurrentData();
-  toast("success", "✅ Contacts enregistrés", "Les informations de contact ont été mises à jour.");
+  toast("success", "✅ Contacts enregistrés", "Les informations de contact et les réseaux sociaux ont été mis à jour.");
 }, "Configuration impossible");
 
 window.saveSponsorPricing = () => runAction(async () => {

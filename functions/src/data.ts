@@ -29,6 +29,11 @@ export const DEFAULT_PLATFORM_CONFIG = {
   contactPhone: "",
   contactEmail: "",
   contactAddress: "",
+  socialFacebook: "",
+  socialInstagram: "",
+  socialTwitter: "",
+  socialWhatsapp: "",
+  socialTiktok: "",
 };
 
 export type SponsorOption = keyof typeof DEFAULT_PLATFORM_CONFIG.sponsorPrices;
@@ -44,6 +49,11 @@ export interface PlatformConfig {
   contactPhone: string;
   contactEmail: string;
   contactAddress: string;
+  socialFacebook: string;
+  socialInstagram: string;
+  socialTwitter: string;
+  socialWhatsapp: string;
+  socialTiktok: string;
 }
 
 export function normalizeShopName(name: string): string {
@@ -246,6 +256,11 @@ export function fromConfigRow(row: ConfigRow): PlatformConfig {
     contactPhone: row.contactPhone ?? "",
     contactEmail: row.contactEmail ?? "",
     contactAddress: row.contactAddress ?? "",
+    socialFacebook: row.socialFacebook ?? "",
+    socialInstagram: row.socialInstagram ?? "",
+    socialTwitter: row.socialTwitter ?? "",
+    socialWhatsapp: row.socialWhatsapp ?? "",
+    socialTiktok: row.socialTiktok ?? "",
   };
 }
 
@@ -335,9 +350,16 @@ export async function serializeProfileWithShop(
   return serialized;
 }
 
-export async function assertShopOwner(uid: string, shopId: string): Promise<Shop> {
+export async function assertShopOwner(
+  uid: string,
+  shopId: string,
+  countryCode?: PlatformCountry,
+): Promise<Shop> {
   const shop = await prisma.shop.findUnique({ where: { id: shopId } });
   if (!shop || shop.deletedAt) {
+    throw new ApiError("not-found", "Shop not found.");
+  }
+  if (countryCode && shop.countryCode !== countryCode) {
     throw new ApiError("not-found", "Shop not found.");
   }
   if (shop.ownerId !== uid) {

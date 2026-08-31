@@ -92,6 +92,17 @@ For each site:
 
 Country routing uses the `X-Platform-Country` header (from `api-config.json` → `country`). Shops, users, banners, and admin config are isolated per country in the shared database.
 
+### Country isolation (important)
+
+Each Netlify site must send the correct `country` in `api-config.json`. The API enforces:
+
+- **Separate accounts per country** — same email can exist on SN and BJ as different users.
+- **Admin scope** — an admin logged in on Senegal can only moderate Senegal data; BJ/TG/CD admins are separate accounts (same `ADMIN_EMAIL`, different `countryCode` in DB).
+- **Merchant scope** — merchants only see and edit shops for their country platform.
+- **Browser storage** — JWT and pending payments are namespaced per country (`seneko_SN_jwt`, `seneko_BJ_jwt`, etc.) so visiting multiple country sites in one browser does not mix sessions.
+
+Do not hardcode `window.SENEKO_API_URL` or country in `index.html`; always use per-site `api-config.json` from `netlify-env/*.env`.
+
 ### Admin contact details
 
 In Admin → **Informations de contact**, set phone, email, and physical address. These appear in the top contact bar and footer for that country only.

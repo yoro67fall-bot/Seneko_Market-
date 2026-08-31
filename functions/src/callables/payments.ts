@@ -291,9 +291,13 @@ export async function createPayment(request: HandlerRequest) {
 export async function getPaymentStatus(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
+    const countryCode = requireCountry(request);
     const { paymentId } = parseInput(paymentIdSchema, request.data);
-    const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
-    if (!payment) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { shop: true },
+    });
+    if (!payment || payment.shop.countryCode !== countryCode) {
       throw new ApiError("not-found", "Payment not found.");
     }
     if (payment.ownerId !== auth.uid && auth.role !== "admin") {
@@ -337,12 +341,14 @@ export async function getPaymentStatus(request: HandlerRequest) {
 export async function submitSponsorship(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(submitSponsorshipSchema, request.data);
-    await assertShopOwner(auth.uid, input.shopId);
+    await assertShopOwner(auth.uid, input.shopId, countryCode);
     const payment = await prisma.payment.findUnique({
       where: { id: input.paymentId },
+      include: { shop: true },
     });
-    if (!payment || payment.ownerId !== auth.uid) {
+    if (!payment || payment.ownerId !== auth.uid || payment.shop.countryCode !== countryCode) {
       throw new ApiError("not-found", "Payment not found.");
     }
     if (payment.purpose !== "sponsor") {

@@ -44,6 +44,7 @@ import {
   adminSetProductStatus,
   adminUpsertCategoryBanner,
   adminDeleteCategoryBanner,
+  adminChangePassword,
 } from "./callables/admin.js";
 import { nabooPayWebhook, senePayWebhook } from "./http/webhook.js";
 import { getCronSecret } from "./config.js";
@@ -78,6 +79,7 @@ const CALLABLES: Record<string, (request: HandlerRequest) => Promise<unknown>> =
   adminSetProductStatus,
   adminUpsertCategoryBanner,
   adminDeleteCategoryBanner,
+  adminChangePassword,
 };
 
 const HTTP_STATUS: Record<string, number> = {
@@ -177,9 +179,16 @@ app.get("/auth/me", async (request, response, next) => {
     if (!auth) {
       throw new ApiError("unauthenticated", "Authentication is required.");
     }
+    const countryCode = countryFromRequest(request);
     const user = await prisma.user.findUnique({ where: { id: auth.uid } });
     if (!user) {
       throw new ApiError("unauthenticated", "Authentication is required.");
+    }
+    if (user.countryCode !== countryCode) {
+      throw new ApiError(
+        "permission-denied",
+        "This account is not valid for this country platform.",
+      );
     }
     response.json({
       result: {
@@ -203,11 +212,21 @@ app.post("/uploads", upload.single("file"), async (request, response, next) => {
       throw new ApiError("invalid-argument", "A file is required.");
     }
     const kind = String(request.body?.kind ?? "");
+    const countryCode = countryFromRequest(request);
     if ((kind === "banner" || kind === "branding") && auth.role !== "admin") {
       throw new ApiError(
         "permission-denied",
         "An administrator account is required.",
       );
+    }
+    if ((kind === "banner" || kind === "branding") && auth.role === "admin") {
+      const user = await prisma.user.findUnique({ where: { id: auth.uid } });
+      if (!user || user.countryCode !== countryCode) {
+        throw new ApiError(
+          "permission-denied",
+          "This account is not valid for this country platform.",
+        );
+      }
     }
     const saved = await saveUpload({
       buffer: file.buffer,

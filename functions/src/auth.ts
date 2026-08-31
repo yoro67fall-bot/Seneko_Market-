@@ -12,9 +12,19 @@ import { serializeProfileWithShop } from "./data.js";
 
 const TOKEN_TTL = "7d";
 
-export function signToken(user: { id: string; email: string; role: string }): string {
+export function signToken(user: {
+  id: string;
+  email: string;
+  role: string;
+  countryCode: string;
+}): string {
   return jwt.sign(
-    { uid: user.id, email: user.email, role: user.role },
+    {
+      uid: user.id,
+      email: user.email,
+      role: user.role,
+      countryCode: user.countryCode,
+    },
     getJwtSecret(),
     { expiresIn: TOKEN_TTL },
   );
@@ -26,12 +36,14 @@ export function verifyToken(token: string): AuthContext {
       uid?: string;
       email?: string;
       role?: string;
+      countryCode?: string;
     };
     if (!payload.uid) throw new Error("invalid");
     return {
       uid: payload.uid,
       email: payload.email ?? null,
       role: payload.role ?? "merchant",
+      countryCode: payload.countryCode ?? null,
     };
   } catch {
     throw new ApiError("unauthenticated", "Authentication is required.");
@@ -128,4 +140,25 @@ export async function loginUser(
     profile: await serializeProfileWithShop(user.id),
     admin: user.role === "admin",
   };
+}
+
+export async function changeUserPassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    throw new ApiError("invalid-argument", "Mot de passe actuel incorrect.");
+  }
+  if (newPassword.length < 8) {
+    throw new ApiError(
+      "invalid-argument",
+      "Le mot de passe doit contenir au moins 8 caractères.",
+    );
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await bcrypt.hash(newPassword, 12) },
+  });
 }

@@ -1,17 +1,15 @@
-import { env } from "../config.js";
 import { isRentCurrentlyPaid, syncShopVisibility } from "../data.js";
+import {
+  sendWhatsAppNotification,
+  shopContactPhone,
+  WHATSAPP_MESSAGES,
+} from "../notifications/whatsapp.js";
 import { prisma } from "../prisma.js";
 
-export const RENT_REMINDER_MESSAGE =
-  "Seneko Market - Votre boutique est masquée, merci de payer votre loyer pour l'afficher sur la Plateforme.";
+export const RENT_REMINDER_MESSAGE = WHATSAPP_MESSAGES.rentHidden;
 
 function monthStartUtc(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-}
-
-function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  return digits ? `+${digits}` : "";
 }
 
 async function wasReminderSentThisMonth(shopId: string, now: Date): Promise<boolean> {
@@ -31,29 +29,6 @@ async function markReminderSent(shopId: string, now: Date): Promise<void> {
     create: { shopId, type: "rent_reminder", day, count: 1 },
     update: { count: { increment: 1 } },
   });
-}
-
-async function sendWhatsAppReminder(phone: string, message: string): Promise<boolean> {
-  const webhookUrl = env("WHATSAPP_REMINDER_WEBHOOK_URL");
-  if (!webhookUrl) {
-    console.warn("rent-reminder: WHATSAPP_REMINDER_WEBHOOK_URL not set; skipped send for", phone);
-    return false;
-  }
-  try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, message }),
-    });
-    if (!response.ok) {
-      console.error("rent-reminder: webhook failed", response.status, await response.text());
-      return false;
-    }
-    return true;
-  } catch (error) {
-    console.error("rent-reminder: webhook error", error);
-    return false;
-  }
 }
 
 export async function runRentReminderJob(now = new Date()): Promise<{
@@ -95,10 +70,10 @@ export async function runRentReminderJob(now = new Date()): Promise<{
       continue;
     }
 
-    const phone = normalizePhone(shop.whatsapp || shop.phone);
+    const phone = shopContactPhone(shop);
     if (!phone) continue;
 
-    const sent = await sendWhatsAppReminder(phone, RENT_REMINDER_MESSAGE);
+    const sent = await sendWhatsAppNotification(phone, RENT_REMINDER_MESSAGE);
     await markReminderSent(shop.id, now);
     if (sent) reminded += 1;
   }

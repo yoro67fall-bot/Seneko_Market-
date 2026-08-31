@@ -3,7 +3,7 @@ import {
   ApiError,
   asApiError,
   parseInput,
-  requireAdmin,
+  requireCountryAdmin,
   requireCountry,
   type HandlerRequest,
 } from "../errors.js";
@@ -23,6 +23,7 @@ import {
   adminReviewSellerSchema,
   adminShopStatusSchema,
   adminVerifyIdentitySchema,
+  changePasswordSchema,
   emptySchema,
 } from "../schemas.js";
 import { prisma } from "../prisma.js";
@@ -35,7 +36,24 @@ import {
   toIso,
 } from "../data.js";
 import { COUNTRY_CURRENCY } from "../country.js";
+import { changeUserPassword } from "../auth.js";
 import { toPublicAssetUrl } from "../uploads.js";
+import {
+  sendWhatsAppNotification,
+  shopContactPhone,
+  WHATSAPP_MESSAGES,
+} from "../notifications/whatsapp.js";
+
+function notifyShopAsync(
+  shop: { phone: string; whatsapp: string },
+  message: string,
+): void {
+  const phone = shopContactPhone(shop);
+  if (!phone) return;
+  void sendWhatsAppNotification(phone, message).catch((error) => {
+    console.error("whatsapp: shop notification failed", error);
+  });
+}
 
 function serializeAgent(agent: Agent): Record<string, unknown> {
   return {
@@ -120,7 +138,7 @@ async function requireShop(shopId: string, countryCode: string): Promise<Shop> {
 
 export async function adminListShops(request: HandlerRequest) {
   try {
-    requireAdmin(request);
+    await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminListSchema, request.data);
     const shops = await prisma.shop.findMany({
@@ -149,7 +167,7 @@ export async function adminListShops(request: HandlerRequest) {
 
 export async function adminBootstrap(request: HandlerRequest) {
   try {
-    requireAdmin(request);
+    await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     parseInput(emptySchema, request.data);
     const [config, agents, banners, categoryBanners, sponsorings] = await Promise.all([
@@ -189,7 +207,7 @@ export async function adminBootstrap(request: HandlerRequest) {
 
 export async function adminSetShopStatus(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminShopStatusSchema, request.data);
     const shop = await requireShop(input.shopId, countryCode);
@@ -240,7 +258,7 @@ export async function adminSetShopStatus(request: HandlerRequest) {
 
 export async function adminSetRentConfig(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminRentConfigSchema, request.data);
     const currency = COUNTRY_CURRENCY[countryCode];
@@ -280,7 +298,7 @@ export async function adminSetRentConfig(request: HandlerRequest) {
 
 export async function adminMarkRent(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminMarkRentSchema, request.data);
     const [config, shop] = await Promise.all([
@@ -312,7 +330,7 @@ export async function adminMarkRent(request: HandlerRequest) {
 
 export async function adminVerifyIdentity(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminVerifyIdentitySchema, request.data);
     const shop = await requireShop(input.shopId, countryCode);
@@ -326,6 +344,12 @@ export async function adminVerifyIdentity(request: HandlerRequest) {
         identityVerifiedAt: new Date(),
       },
     });
+    if (!input.verified) {
+      notifyShopAsync(
+        shop,
+        WHATSAPP_MESSAGES.identityRejected("Document non conforme"),
+      );
+    }
     return { shop: await getPrivateShopById(input.shopId) };
   } catch (error) {
     throw asApiError(error);
@@ -334,7 +358,7 @@ export async function adminVerifyIdentity(request: HandlerRequest) {
 
 export async function adminUpsertAgent(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminAgentSchema, request.data);
     const code = input.code.toUpperCase();
@@ -345,17 +369,25 @@ export async function adminUpsertAgent(request: HandlerRequest) {
       throw new ApiError("already-exists", "This agent code is already in use.");
     }
     const agent = input.agentId
-      ? await prisma.agent.update({
-          where: { id: input.agentId },
-          data: {
-            name: input.name,
-            phone: input.phone,
-            code,
-            commission: input.commission,
-            active: input.active,
-            updatedBy: adminUid,
-          },
-        })
+      ? await (async () => {
+          const existing = await prisma.agent.findFirst({
+            where: { id: input.agentId, countryCode },
+          });
+          if (!existing) {
+            throw new ApiError("not-found", "Agent not found.");
+          }
+          return prisma.agent.update({
+            where: { id: existing.id },
+            data: {
+              name: input.name,
+              phone: input.phone,
+              code,
+              commission: input.commission,
+              active: input.active,
+              updatedBy: adminUid,
+            },
+          });
+        })()
       : await prisma.agent.create({
           data: {
             name: input.name,
@@ -375,7 +407,7 @@ export async function adminUpsertAgent(request: HandlerRequest) {
 
 export async function adminDeleteAgent(request: HandlerRequest) {
   try {
-    requireAdmin(request);
+    await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const { agentId } = parseInput(adminAgentIdSchema, request.data);
     await prisma.agent.deleteMany({ where: { id: agentId, countryCode } });
@@ -387,7 +419,7 @@ export async function adminDeleteAgent(request: HandlerRequest) {
 
 export async function adminUpsertBanner(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminBannerSchema, request.data);
     const data = {
@@ -403,7 +435,15 @@ export async function adminUpsertBanner(request: HandlerRequest) {
       countryCode,
     };
     const banner = input.bannerId
-      ? await prisma.banner.update({ where: { id: input.bannerId }, data })
+      ? await (async () => {
+          const existing = await prisma.banner.findFirst({
+            where: { id: input.bannerId, countryCode },
+          });
+          if (!existing) {
+            throw new ApiError("not-found", "Banner not found.");
+          }
+          return prisma.banner.update({ where: { id: existing.id }, data });
+        })()
       : await prisma.banner.create({ data });
     return { banner: serializeBanner(banner) };
   } catch (error) {
@@ -413,7 +453,7 @@ export async function adminUpsertBanner(request: HandlerRequest) {
 
 export async function adminDeleteBanner(request: HandlerRequest) {
   try {
-    requireAdmin(request);
+    await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const { bannerId } = parseInput(adminBannerIdSchema, request.data);
     await prisma.banner.deleteMany({ where: { id: bannerId, countryCode } });
@@ -425,7 +465,7 @@ export async function adminDeleteBanner(request: HandlerRequest) {
 
 export async function adminReviewSeller(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminReviewSellerSchema, request.data);
     const shop = await requireShop(input.shopId, countryCode);
@@ -449,6 +489,14 @@ export async function adminReviewSeller(request: HandlerRequest) {
         lastModeratedAt: new Date(),
       },
     });
+    if (!approved) {
+      notifyShopAsync(
+        shop,
+        WHATSAPP_MESSAGES.identityRejected(
+          input.rejectionReason ?? "Document non conforme",
+        ),
+      );
+    }
     return { shop: await getPrivateShopById(input.shopId) };
   } catch (error) {
     throw asApiError(error);
@@ -457,7 +505,7 @@ export async function adminReviewSeller(request: HandlerRequest) {
 
 export async function adminListProducts(request: HandlerRequest) {
   try {
-    requireAdmin(request);
+    await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminListProductsSchema, request.data);
     const products = await prisma.product.findMany({
@@ -482,7 +530,7 @@ export async function adminListProducts(request: HandlerRequest) {
 
 export async function adminSetProductStatus(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminProductStatusSchema, request.data);
     const product = await prisma.product.findUnique({
@@ -503,6 +551,15 @@ export async function adminSetProductStatus(request: HandlerRequest) {
       },
       include: { shop: true },
     });
+    if (input.decision === "rejected") {
+      notifyShopAsync(
+        updated.shop,
+        WHATSAPP_MESSAGES.productRejected(
+          updated.name,
+          input.rejectionReason ?? "Non conforme",
+        ),
+      );
+    }
     return { product: serializeAdminProduct(updated) };
   } catch (error) {
     throw asApiError(error);
@@ -511,7 +568,7 @@ export async function adminSetProductStatus(request: HandlerRequest) {
 
 export async function adminUpsertCategoryBanner(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminCategoryBannerSchema, request.data);
     const data = {
@@ -526,7 +583,15 @@ export async function adminUpsertCategoryBanner(request: HandlerRequest) {
       countryCode,
     };
     const banner = input.bannerId
-      ? await prisma.categoryBanner.update({ where: { id: input.bannerId }, data })
+      ? await (async () => {
+          const existing = await prisma.categoryBanner.findFirst({
+            where: { id: input.bannerId, countryCode },
+          });
+          if (!existing) {
+            throw new ApiError("not-found", "Category banner not found.");
+          }
+          return prisma.categoryBanner.update({ where: { id: existing.id }, data });
+        })()
       : await prisma.categoryBanner.upsert({
           where: {
             countryCode_categoryName: {
@@ -545,7 +610,7 @@ export async function adminUpsertCategoryBanner(request: HandlerRequest) {
 
 export async function adminDeleteCategoryBanner(request: HandlerRequest) {
   try {
-    requireAdmin(request);
+    await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const { bannerId } = parseInput(adminCategoryBannerIdSchema, request.data);
     await prisma.categoryBanner.deleteMany({ where: { id: bannerId, countryCode } });
@@ -557,7 +622,7 @@ export async function adminDeleteCategoryBanner(request: HandlerRequest) {
 
 export async function adminSetPlatformBranding(request: HandlerRequest) {
   try {
-    const adminUid = requireAdmin(request);
+    const adminUid = await requireCountryAdmin(request);
     const countryCode = requireCountry(request);
     const input = parseInput(adminBrandingSchema, request.data);
     const currency = COUNTRY_CURRENCY[countryCode];
@@ -571,6 +636,11 @@ export async function adminSetPlatformBranding(request: HandlerRequest) {
         contactPhone: input.contactPhone ?? "",
         contactEmail: input.contactEmail ?? "",
         contactAddress: input.contactAddress ?? "",
+        socialFacebook: input.socialFacebook ?? "",
+        socialInstagram: input.socialInstagram ?? "",
+        socialTwitter: input.socialTwitter ?? "",
+        socialWhatsapp: input.socialWhatsapp ?? "",
+        socialTiktok: input.socialTiktok ?? "",
         updatedBy: adminUid,
       },
       update: {
@@ -586,10 +656,36 @@ export async function adminSetPlatformBranding(request: HandlerRequest) {
         ...(input.contactAddress !== undefined
           ? { contactAddress: input.contactAddress }
           : {}),
+        ...(input.socialFacebook !== undefined
+          ? { socialFacebook: input.socialFacebook }
+          : {}),
+        ...(input.socialInstagram !== undefined
+          ? { socialInstagram: input.socialInstagram }
+          : {}),
+        ...(input.socialTwitter !== undefined
+          ? { socialTwitter: input.socialTwitter }
+          : {}),
+        ...(input.socialWhatsapp !== undefined
+          ? { socialWhatsapp: input.socialWhatsapp }
+          : {}),
+        ...(input.socialTiktok !== undefined
+          ? { socialTiktok: input.socialTiktok }
+          : {}),
         updatedBy: adminUid,
       },
     });
     return { config: await getPlatformConfig(countryCode) };
+  } catch (error) {
+    throw asApiError(error);
+  }
+}
+
+export async function adminChangePassword(request: HandlerRequest) {
+  try {
+    const adminUid = await requireCountryAdmin(request);
+    const input = parseInput(changePasswordSchema, request.data);
+    await changeUserPassword(adminUid, input.currentPassword, input.newPassword);
+    return { changed: true };
   } catch (error) {
     throw asApiError(error);
   }

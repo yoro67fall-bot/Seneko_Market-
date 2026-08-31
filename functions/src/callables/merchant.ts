@@ -1,4 +1,4 @@
-import { ApiError, asApiError, parseInput, requireAuth, requireCountry, type HandlerRequest } from "../errors.js";
+import { ApiError, asApiError, parseInput, requireAuth, requireCountry, requireCountryUser, type HandlerRequest } from "../errors.js";
 import {
   deleteProductSchema,
   emptySchema,
@@ -42,6 +42,7 @@ export async function completeMerchantProfile(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
     const countryCode = requireCountry(request);
+    await requireCountryUser(request);
     const input = parseInput(merchantProfileSchema, request.data);
     if (!validateIdentityPath(auth.uid, input.shop.idCardPath)) {
       throw new ApiError(
@@ -53,6 +54,12 @@ export async function completeMerchantProfile(request: HandlerRequest) {
 
     const existing = await prisma.shop.findUnique({ where: { ownerId: auth.uid } });
     if (existing && !existing.deletedAt) {
+      if (existing.countryCode !== countryCode) {
+        throw new ApiError(
+          "permission-denied",
+          "This account is not valid for this country platform.",
+        );
+      }
       return {
         profile: await serializeProfileWithShop(auth.uid, existing),
         shop: await getPrivateShopById(existing.id),
@@ -128,9 +135,13 @@ export async function completeMerchantProfile(request: HandlerRequest) {
 export async function getMyAccount(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
+    const countryCode = requireCountry(request);
+    await requireCountryUser(request);
     parseInput(emptySchema, request.data);
     await syncShopVisibility();
-    const shop = await prisma.shop.findUnique({ where: { ownerId: auth.uid } });
+    const shop = await prisma.shop.findFirst({
+      where: { ownerId: auth.uid, countryCode, deletedAt: null },
+    });
     return {
       profile: await serializeProfileWithShop(auth.uid, shop),
       shop: shop ? await getPrivateShopById(shop.id) : null,
@@ -187,12 +198,9 @@ export async function updateMyShop(request: HandlerRequest) {
 export async function deleteMyShop(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
+    const countryCode = requireCountry(request);
     const { shopId } = parseInput(shopIdSchema, request.data);
-    const shop = await prisma.shop.findUnique({ where: { id: shopId } });
-    if (!shop || shop.deletedAt) return { deleted: true };
-    if (shop.ownerId !== auth.uid) {
-      throw new ApiError("permission-denied", "You do not own this shop.");
-    }
+    const shop = await assertShopOwner(auth.uid, shopId, countryCode);
     await prisma.$transaction([
       prisma.shop.update({
         where: { id: shopId },
@@ -218,8 +226,9 @@ export async function deleteMyShop(request: HandlerRequest) {
 export async function upsertProduct(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(upsertProductSchema, request.data);
-    const shop = await assertShopOwner(auth.uid, input.shopId);
+    const shop = await assertShopOwner(auth.uid, input.shopId, countryCode);
     const images = input.images.map((image) => toPublicAssetUrl(image));
     let product;
     if (input.productId) {
@@ -267,8 +276,9 @@ export async function upsertProduct(request: HandlerRequest) {
 export async function deleteProduct(request: HandlerRequest) {
   try {
     const auth = requireAuth(request);
+    const countryCode = requireCountry(request);
     const input = parseInput(deleteProductSchema, request.data);
-    await assertShopOwner(auth.uid, input.shopId);
+    await assertShopOwner(auth.uid, input.shopId, countryCode);
     await prisma.product.deleteMany({
       where: { id: input.productId, shopId: input.shopId },
     });

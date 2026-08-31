@@ -1,6 +1,8 @@
+import type { User } from "@prisma/client";
 import type { z } from "zod";
 import type { PlatformCountry } from "./country.js";
 import { DEFAULT_COUNTRY } from "./country.js";
+import { prisma } from "./prisma.js";
 
 export class ApiError extends Error {
   constructor(
@@ -17,6 +19,7 @@ export type AuthContext = {
   uid: string;
   email: string | null;
   role: string;
+  countryCode?: string | null;
 };
 
 export type HandlerRequest = {
@@ -62,6 +65,30 @@ export function requireAdmin(request: HandlerRequest): string {
     throw new ApiError("permission-denied", "An administrator account is required.");
   }
   return auth.uid;
+}
+
+export async function requireCountryUser(request: HandlerRequest): Promise<User> {
+  const auth = requireAuth(request);
+  const countryCode = requireCountry(request);
+  const user = await prisma.user.findUnique({ where: { id: auth.uid } });
+  if (!user) {
+    throw new ApiError("unauthenticated", "Authentication is required.");
+  }
+  if (user.countryCode !== countryCode) {
+    throw new ApiError(
+      "permission-denied",
+      "This account is not valid for this country platform.",
+    );
+  }
+  return user;
+}
+
+export async function requireCountryAdmin(request: HandlerRequest): Promise<string> {
+  const user = await requireCountryUser(request);
+  if (user.role !== "admin") {
+    throw new ApiError("permission-denied", "An administrator account is required.");
+  }
+  return user.id;
 }
 
 export function asApiError(error: unknown): ApiError {

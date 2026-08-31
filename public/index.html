@@ -294,7 +294,7 @@
             align-items: center;
             justify-content: center;
             color: var(--bg-white);
-            font-size: 1.8rem;
+            font-size: 2rem;
             flex-shrink: 0;
         }
 
@@ -1254,6 +1254,21 @@
             border-radius: var(--radius-full);
         }
 
+        #searchResultInfo.search-result-link {
+            color: var(--primary);
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        #searchResultInfo.search-result-link .search-result-shop-link {
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+
+        #searchResultInfo.search-result-link:hover {
+            opacity: 0.85;
+        }
+
         /* Bannière sponsorisée dans les catégories */
         .category-sponsor-banner {
             display: none;
@@ -1274,6 +1289,7 @@
         .category-sponsor-banner .sponsor-banner-content {
             display: flex;
             align-items: center;
+            justify-content: flex-end;
             gap: 1.5rem;
             padding: 1rem 1.5rem;
             background-size: cover;
@@ -5307,7 +5323,7 @@
                         <div class="step-number">2</div>
                         <span class="step-icon"><i class="fas fa-store"></i></span>
                         <h4>Publier</h4>
-                        <p>Ajoutez votre boutique et vos produits (jusqu'à 10 images).</p>
+                        <p>Ajoutez votre boutique et vos produits.</p>
                     </div>
                     <div class="step-card">
                         <div class="step-number">3</div>
@@ -5908,7 +5924,7 @@
             <!-- Informations de contact -->
             <div class="admin-contact-config">
                 <h3><i class="fas fa-address-card"></i> Informations de contact <span id="adminContactCountryLabel" style="color:var(--secondary);font-weight:700;"></span></h3>
-                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Téléphone, email et adresse affichés sur <strong>cette plateforme uniquement</strong> (chaque pays a ses propres contacts). Connectez-vous en admin sur le site Bénin / Togo / RDC pour les modifier.</p>
+                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Téléphone, email, adresse et réseaux sociaux affichés sur <strong>cette plateforme uniquement</strong> (chaque pays a ses propres contacts). Connectez-vous en admin sur le site Bénin / Togo / RDC pour les modifier.</p>
                 <div class="contact-config-row">
                     <label for="contactPhoneInput">Téléphone</label>
                     <input type="text" id="contactPhoneInput" placeholder="+229 01 23 45 67">
@@ -5921,8 +5937,53 @@
                     <label for="contactAddressInput">Adresse physique</label>
                     <input type="text" id="contactAddressInput" placeholder="Ville, Pays">
                 </div>
+                <h4 style="margin:1rem 0 0.6rem;font-size:0.95rem;color:var(--text-dark);">
+                    <i class="fas fa-share-alt" style="color:var(--secondary);"></i> Réseaux sociaux
+                </h4>
+                <p style="color:var(--text-gray);font-size:0.8rem;margin-bottom:0.6rem;">Liens affichés dans le pied de page. Laissez vide pour masquer une icône.</p>
+                <div class="contact-config-row">
+                    <label for="socialFacebookInput"><i class="fab fa-facebook"></i> Facebook</label>
+                    <input type="url" id="socialFacebookInput" placeholder="https://facebook.com/...">
+                </div>
+                <div class="contact-config-row">
+                    <label for="socialInstagramInput"><i class="fab fa-instagram"></i> Instagram</label>
+                    <input type="url" id="socialInstagramInput" placeholder="https://instagram.com/...">
+                </div>
+                <div class="contact-config-row">
+                    <label for="socialTwitterInput"><i class="fab fa-twitter"></i> Twitter / X</label>
+                    <input type="url" id="socialTwitterInput" placeholder="https://twitter.com/...">
+                </div>
+                <div class="contact-config-row">
+                    <label for="socialWhatsappInput"><i class="fab fa-whatsapp"></i> WhatsApp</label>
+                    <input type="url" id="socialWhatsappInput" placeholder="https://wa.me/...">
+                </div>
+                <div class="contact-config-row">
+                    <label for="socialTiktokInput"><i class="fab fa-tiktok"></i> TikTok</label>
+                    <input type="url" id="socialTiktokInput" placeholder="https://tiktok.com/@...">
+                </div>
                 <button class="btn btn-primary" onclick="saveContactConfig()">
-                    <i class="fas fa-save"></i> Enregistrer les contacts
+                    <i class="fas fa-save"></i> Enregistrer contacts et réseaux sociaux
+                </button>
+            </div>
+
+            <!-- Mot de passe administrateur -->
+            <div class="admin-password-config" style="margin-top:1.5rem;padding:1rem;background:var(--bg-light);border-radius:var(--radius);border:1px solid var(--border-color);">
+                <h3><i class="fas fa-lock" style="color:var(--primary);"></i> Mot de passe administrateur</h3>
+                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Modifiez le mot de passe de votre compte admin pour cette plateforme.</p>
+                <div class="contact-config-row">
+                    <label for="adminCurrentPasswordInput">Mot de passe actuel</label>
+                    <input type="password" id="adminCurrentPasswordInput" autocomplete="current-password" placeholder="••••••••">
+                </div>
+                <div class="contact-config-row">
+                    <label for="adminNewPasswordInput">Nouveau mot de passe</label>
+                    <input type="password" id="adminNewPasswordInput" autocomplete="new-password" placeholder="8 caractères minimum">
+                </div>
+                <div class="contact-config-row">
+                    <label for="adminConfirmPasswordInput">Confirmer le nouveau mot de passe</label>
+                    <input type="password" id="adminConfirmPasswordInput" autocomplete="new-password" placeholder="••••••••">
+                </div>
+                <button class="btn btn-primary" onclick="changeAdminPassword()">
+                    <i class="fas fa-key"></i> Changer le mot de passe
                 </button>
             </div>
 
@@ -6401,12 +6462,7 @@ FOOTER
                         Seneko Market
                     </h3>
                     <p>Marketplace de mise en relation directe</p>
-                    <div class="social-links">
-                        <a href="#"><i class="fab fa-facebook"></i></a>
-                        <a href="#"><i class="fab fa-instagram"></i></a>
-                        <a href="#"><i class="fab fa-twitter"></i></a>
-                        <a href="#"><i class="fab fa-whatsapp"></i></a>
-                    </div>
+                    <div class="social-links" id="footerSocialLinks"></div>
                 </div>
                 <div>
                     <h4>Plateforme</h4>
@@ -7739,6 +7795,54 @@ SCRIPT COMPLET
         // ================================================================
         // CONFIGURATION DU LOYER
         // ================================================================
+        function applySocialDisplay({
+            facebook = '',
+            instagram = '',
+            twitter = '',
+            whatsapp = '',
+            tiktok = ''
+        } = {}) {
+            const container = document.getElementById('footerSocialLinks');
+            if (!container) return;
+            const links = [{
+                    url: facebook,
+                    icon: 'fab fa-facebook',
+                    label: 'Facebook'
+                },
+                {
+                    url: instagram,
+                    icon: 'fab fa-instagram',
+                    label: 'Instagram'
+                },
+                {
+                    url: twitter,
+                    icon: 'fab fa-twitter',
+                    label: 'Twitter'
+                },
+                {
+                    url: whatsapp,
+                    icon: 'fab fa-whatsapp',
+                    label: 'WhatsApp'
+                },
+                {
+                    url: tiktok,
+                    icon: 'fab fa-tiktok',
+                    label: 'TikTok'
+                }
+            ].filter(item => item.url && String(item.url).trim());
+            if (!links.length) {
+                container.innerHTML = '';
+                container.style.display = 'none';
+                return;
+            }
+            container.style.display = 'flex';
+            container.innerHTML = links.map(item => `
+                <a href="${String(item.url).replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer" aria-label="${item.label}">
+                    <i class="${item.icon}"></i>
+                </a>
+            `).join('');
+        }
+
         function applyContactDisplay({ phone = '', email = '', address = '' } = {}) {
             const setText = (id, value) => {
                 const node = document.getElementById(id);
@@ -8033,11 +8137,7 @@ SCRIPT COMPLET
                 container.className = 'category-sponsor-banner active';
                 container.innerHTML = `
                             <div class="sponsor-banner-content" style="background-image: url(${activeSponsor.image});">
-                                <div class="banner-info">
-                                    <div class="banner-title">${activeSponsor.title}</div>
-                                    <div class="banner-desc">${activeSponsor.description}</div>
-                                </div>
-                                <span class="banner-tag">⭐ Sponsorisé • ${activeSponsor.price.toLocaleString()} F</span>
+                                <span class="banner-tag">⭐ Sponsorisé</span>
                             </div>
                         `;
             } else {
@@ -8150,7 +8250,89 @@ SCRIPT COMPLET
         // ================================================================
         // NAVIGATION
         // ================================================================
-        function showPage(page) {
+        let trackedPage = 'home';
+        let trackedShopId = null;
+
+        function getPlatformCountryCode() {
+            return (document.documentElement.getAttribute('data-country') || 'SN').toUpperCase();
+        }
+
+        function getShopSessionKey() {
+            return `seneko_${getPlatformCountryCode()}_currentShopId`;
+        }
+
+        function getCurrentShopId() {
+            const value = sessionStorage.getItem(getShopSessionKey());
+            if (value) return parseInt(value, 10);
+            const legacy = sessionStorage.getItem('currentShopId');
+            return legacy ? parseInt(legacy, 10) : NaN;
+        }
+
+        function setCurrentShopId(shopId) {
+            sessionStorage.setItem(getShopSessionKey(), String(shopId));
+        }
+
+        function getPageHistoryState(page) {
+            if (page === 'shop-detail') {
+                const shopId = getCurrentShopId();
+                return {
+                    page,
+                    shopId: Number.isFinite(shopId) ? shopId : null
+                };
+            }
+            return { page };
+        }
+
+        function pushPageHistory(page) {
+            const state = getPageHistoryState(page);
+            const url = window.location.pathname + window.location.search + window.location.hash;
+            history.pushState(state, '', url);
+            trackedPage = page;
+            trackedShopId = state.shopId || null;
+        }
+
+        function shouldPushPageHistory(page) {
+            if (page === 'shop-detail') {
+                const shopId = getCurrentShopId();
+                return page !== trackedPage || shopId !== trackedShopId;
+            }
+            return page !== trackedPage;
+        }
+
+        function initPageHistory() {
+            history.replaceState({ page: 'home' }, '', window.location.pathname + window.location.search + window.location.hash);
+            trackedPage = 'home';
+            trackedShopId = null;
+        }
+
+        function handleHistoryNavigation(state) {
+            if (!state || !state.page) {
+                const activePage = document.querySelector('.page.active');
+                const activeId = activePage ? activePage.id.replace('page-', '') : 'home';
+                if (activeId !== 'home') {
+                    history.pushState({ page: 'home' }, '', window.location.pathname + window.location.search);
+                    showPage('home', { fromHistory: true });
+                    resetFilter();
+                }
+                return;
+            }
+
+            if (state.page === 'shop-detail' && state.shopId) {
+                setCurrentShopId(state.shopId);
+                showShopDetail(state.shopId, { fromHistory: true });
+                return;
+            }
+
+            showPage(state.page, { fromHistory: true });
+            if (state.page === 'home') resetFilter();
+        }
+
+        window.addEventListener('popstate', (event) => {
+            handleHistoryNavigation(event.state);
+        });
+
+        function showPage(page, options = {}) {
+            const fromHistory = options.fromHistory === true;
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             const target = document.getElementById(`page-${page}`);
             if (target) target.classList.add('active');
@@ -8240,7 +8422,7 @@ SCRIPT COMPLET
                 updateAdminDashboard();
             }
             if (page === 'shop-detail') {
-                const shopId = parseInt(sessionStorage.getItem('currentShopId'));
+                const shopId = getCurrentShopId();
                 if (shopId) {
                     const shop = shopsData.find(s => s.id === shopId);
                     if (shop) {
@@ -8253,7 +8435,18 @@ SCRIPT COMPLET
             updateReminderVisibility();
             updateNavAuth();
             updateAdminVisibility();
+
+            if (!fromHistory && shouldPushPageHistory(page)) {
+                pushPageHistory(page);
+            } else if (fromHistory) {
+                trackedPage = page;
+                trackedShopId = page === 'shop-detail'
+                    ? getCurrentShopId() || null
+                    : null;
+            }
         }
+
+        initPageHistory();
 
         function closeMobileMenu() {
             document.getElementById('mobileMenu').classList.remove('active');
@@ -8324,7 +8517,7 @@ SCRIPT COMPLET
                 item.style.borderColor = '';
             });
             document.getElementById('searchInput').value = '';
-            document.getElementById('searchResultInfo').textContent = '';
+            clearSearchResultInfo();
             renderShopsWithFilter(null);
             // Cacher la bannière sponsorisée
             const container = document.getElementById('categorySponsorBannerContainer');
@@ -8334,12 +8527,79 @@ SCRIPT COMPLET
             }
         }
 
+        function clearSearchResultInfo() {
+            const infoDiv = document.getElementById('searchResultInfo');
+            if (!infoDiv) return;
+            infoDiv.textContent = '';
+            infoDiv.onclick = null;
+            infoDiv.onkeydown = null;
+            infoDiv.classList.remove('search-result-link');
+            infoDiv.removeAttribute('role');
+            infoDiv.removeAttribute('tabindex');
+        }
+
+        function updateSearchResultInfo(results, query) {
+            const infoDiv = document.getElementById('searchResultInfo');
+            if (!infoDiv) return;
+
+            if (!results.length) {
+                infoDiv.textContent = `❌ Aucune boutique trouvée pour "${query}"`;
+                infoDiv.onclick = null;
+                infoDiv.onkeydown = null;
+                infoDiv.classList.remove('search-result-link');
+                infoDiv.removeAttribute('role');
+                infoDiv.removeAttribute('tabindex');
+                return;
+            }
+
+            const searchTerm = query.trim().toLowerCase();
+            const exactMatch = results.find(shop => shop.name.toLowerCase() === searchTerm);
+            const targetShop = exactMatch || (results.length === 1 ? results[0] : null);
+            const countLabel = results.length === 1 ? '1 résultat' : `${results.length} résultats`;
+
+            infoDiv.classList.add('search-result-link');
+            infoDiv.setAttribute('role', 'button');
+            infoDiv.setAttribute('tabindex', '0');
+            infoDiv.replaceChildren();
+
+            const prefix = document.createTextNode(`🔍 ${countLabel} pour "${query}" — `);
+            const linkPart = document.createElement('span');
+            linkPart.className = 'search-result-shop-link';
+
+            if (targetShop) {
+                linkPart.textContent = `Voir ${targetShop.name}`;
+                const openShop = () => showShopDetail(targetShop.id);
+                infoDiv.onclick = openShop;
+                infoDiv.onkeydown = (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openShop();
+                    }
+                };
+            } else {
+                linkPart.textContent = 'Voir les boutiques';
+                const scrollToShops = () => {
+                    const shopsList = document.getElementById('shops-list');
+                    if (shopsList) shopsList.scrollIntoView({ behavior: 'smooth' });
+                };
+                infoDiv.onclick = scrollToShops;
+                infoDiv.onkeydown = (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        scrollToShops();
+                    }
+                };
+            }
+
+            infoDiv.appendChild(prefix);
+            infoDiv.appendChild(linkPart);
+        }
+
         function performSearch(query) {
             const searchTerm = query.trim().toLowerCase();
-            const infoDiv = document.getElementById('searchResultInfo');
             if (!searchTerm) {
                 resetFilter();
-                infoDiv.textContent = '';
+                clearSearchResultInfo();
                 return;
             }
             const results = shopsData.filter(shop =>
@@ -8349,10 +8609,10 @@ SCRIPT COMPLET
                     shop.description.toLowerCase().includes(searchTerm))
             );
             if (results.length === 0) {
-                infoDiv.textContent = `❌ Aucune boutique trouvée pour "${query}"`;
+                updateSearchResultInfo([], query);
                 renderShopsWithFilter([]);
             } else {
-                infoDiv.textContent = `🔍 ${results.length} résultat(s) pour "${query}"`;
+                updateSearchResultInfo(results, query);
                 renderShopsWithFilter(results);
             }
             currentFilterCategory = null;
@@ -8752,7 +9012,6 @@ SCRIPT COMPLET
                 card.onclick = function(e) {
                     if (e.target.closest('a') || e.target.closest('button')) return;
                     if (!isHidden) {
-                        sessionStorage.setItem('currentShopId', shop.id);
                         showShopDetail(shop.id);
                     }
                 };
@@ -8817,12 +9076,13 @@ SCRIPT COMPLET
         // ================================================================
         // DÉTAILS BOUTIQUE
         // ================================================================
-        function showShopDetail(shopId) {
+        function showShopDetail(shopId, options = {}) {
             const shop = shopsData.find(s => s.id === shopId);
             if (!shop) {
                 showToast('error', '⚠️ Erreur', 'Boutique introuvable.');
                 return;
             }
+            setCurrentShopId(shop.id);
             const header = document.getElementById('shopDetailHeader');
             const statusClass = shop.rentPaid && shop.approved !== false && shop.visible !== false ? 'online' : 'offline';
             const statusText = shop.rentPaid && shop.approved !== false && shop.visible !== false ? '🟢 En ligne' : '🔴 Masquée';
@@ -8862,7 +9122,7 @@ SCRIPT COMPLET
             document.getElementById('addProductBtnShopDetail').style.display = isOwner ? 'inline-flex' : 'none';
             const visibleProducts = shop.products ? shop.products.filter(p => p.approved === true) : [];
             renderProducts(visibleProducts, shop);
-            showPage('shop-detail');
+            showPage('shop-detail', options);
         }
 
         // ================================================================
@@ -9979,7 +10239,7 @@ SCRIPT COMPLET
                     categorySponsorsData = categoryBanners.map(banner => ({
                         ...banner,
                         category: banner.categoryName || banner.category,
-                        title: banner.title || banner.description || banner.categoryName || 'Sponsor',
+                        title: banner.title || banner.categoryName || banner.category || 'Bannière catégorie',
                         description: banner.description || '',
                         price: Number(banner.price || 0),
                         image: banner.image,
@@ -10035,13 +10295,35 @@ SCRIPT COMPLET
                 const phone = typeof config.contactPhone === 'string' ? config.contactPhone.trim() : '';
                 const email = typeof config.contactEmail === 'string' ? config.contactEmail.trim() : '';
                 const address = typeof config.contactAddress === 'string' ? config.contactAddress.trim() : '';
+                const socialFacebook = typeof config.socialFacebook === 'string' ? config.socialFacebook.trim() : '';
+                const socialInstagram = typeof config.socialInstagram === 'string' ? config.socialInstagram.trim() : '';
+                const socialTwitter = typeof config.socialTwitter === 'string' ? config.socialTwitter.trim() : '';
+                const socialWhatsapp = typeof config.socialWhatsapp === 'string' ? config.socialWhatsapp.trim() : '';
+                const socialTiktok = typeof config.socialTiktok === 'string' ? config.socialTiktok.trim() : '';
                 const phoneInput = document.getElementById('contactPhoneInput');
                 const emailInput = document.getElementById('contactEmailInput');
                 const addressInput = document.getElementById('contactAddressInput');
+                const socialFacebookInput = document.getElementById('socialFacebookInput');
+                const socialInstagramInput = document.getElementById('socialInstagramInput');
+                const socialTwitterInput = document.getElementById('socialTwitterInput');
+                const socialWhatsappInput = document.getElementById('socialWhatsappInput');
+                const socialTiktokInput = document.getElementById('socialTiktokInput');
                 if (phoneInput) phoneInput.value = phone;
                 if (emailInput) emailInput.value = email;
                 if (addressInput) addressInput.value = address;
+                if (socialFacebookInput) socialFacebookInput.value = socialFacebook;
+                if (socialInstagramInput) socialInstagramInput.value = socialInstagram;
+                if (socialTwitterInput) socialTwitterInput.value = socialTwitter;
+                if (socialWhatsappInput) socialWhatsappInput.value = socialWhatsapp;
+                if (socialTiktokInput) socialTiktokInput.value = socialTiktok;
                 applyContactDisplay({ phone, email, address });
+                applySocialDisplay({
+                    facebook: socialFacebook,
+                    instagram: socialInstagram,
+                    twitter: socialTwitter,
+                    whatsapp: socialWhatsapp,
+                    tiktok: socialTiktok
+                });
             },
             setAuth({ profile, admin = false } = {}) {
                 currentUser = profile ? {
@@ -10147,7 +10429,8 @@ SCRIPT COMPLET
             'saveSponsorPricing', 'removeLogo', 'createNewShop',
             'addCategorySponsor', 'toggleCategorySponsor', 'deleteCategorySponsor',
             'approveProduct', 'rejectProduct', 'previewIdCard', 'verifyIdFromPreview',
-            'previewProduct', 'approveProductFromPreview', 'rejectProductFromPreview'
+            'previewProduct', 'approveProductFromPreview', 'rejectProductFromPreview',
+            'changeAdminPassword'
         ].forEach(name => { window[name] = backendPending; });
         shopsData = [];
         agentsData = [];
