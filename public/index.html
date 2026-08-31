@@ -5084,6 +5084,14 @@
                     <i class="fas fa-times"></i> Rejeter
                 </button>
             </div>
+            <div class="modal-id-actions" id="previewModalProductActions">
+                <button type="button" class="btn btn-success btn-sm" onclick="approveProductFromPreview()">
+                    <i class="fas fa-check"></i> Approuver
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="rejectProductFromPreview()">
+                    <i class="fas fa-times"></i> Rejeter
+                </button>
+            </div>
         </div>
     </div>
 
@@ -6037,7 +6045,7 @@
             <!-- Modération des produits -->
             <div class="admin-product-moderation">
                 <h3><i class="fas fa-box" style="color:var(--warning);"></i> Modération des produits</h3>
-                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Validez ou rejetez les produits ajoutés par les vendeurs.</p>
+                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Cliquez sur l'aperçu ou sur « Voir le produit » pour consulter les images et la description avant d'approuver ou de rejeter.</p>
                 <div class="product-moderation-list" id="productModerationList"></div>
             </div>
 
@@ -8042,151 +8050,28 @@ SCRIPT COMPLET
         // ADMIN - MODÉRATION DES PRODUITS
         // ================================================================
         function renderProductModeration() {
-            const list = document.getElementById('productModerationList');
-            if (!list) return;
-
-            // Récupérer tous les produits en attente (approved === false)
-            const pendingProducts = [];
-            shopsData.forEach(shop => {
-                if (shop.products) {
-                    shop.products.forEach(p => {
-                        const status = p.approvalStatus || (p.approved === true ? 'approved' : (p.rejectionReason ? 'rejected' : 'pending'));
-                        if (status === 'pending') {
-                            pendingProducts.push({
-                                ...p,
-                                shopName: shop.name,
-                                shopId: shop.id,
-                                shopEmail: shop.email || shop.ownerEmail
-                            });
-                        }
-                    });
-                }
-            });
-
-            if (pendingProducts.length === 0) {
-                list.innerHTML =
-                    '<p style="color:var(--text-light);text-align:center;padding:1rem 0;">Aucun produit en attente de validation.</p>';
-                return;
+            if (typeof window.renderProductModeration === "function" && window.renderProductModeration !== renderProductModeration) {
+                window.renderProductModeration();
             }
-
-            list.innerHTML = pendingProducts.map(p => {
-                const firstImg = p.images && p.images.length > 0 ? p.images[0] : '📦';
-                const imgHtml = /^(https?:\/\/|data:image\/|blob:)/i.test(firstImg) ?
-                    `<img src="${firstImg}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;">` :
-                    `<span style="font-size:1.5rem;">${firstImg}</span>`;
-                return `
-                            <div class="product-item">
-                                <div class="product-preview">${imgHtml}</div>
-                                <div class="product-info">
-                                    <div class="product-name">${p.name}</div>
-                                    <div class="product-detail">${p.price} • ${p.category || 'Non catégorisé'} • Boutique: ${p.shopName}</div>
-                                    <div class="product-detail" style="font-size:0.65rem;color:var(--text-light);">${p.description.substring(0, 80)}${p.description.length > 80 ? '...' : ''}</div>
-                                </div>
-                                <span class="product-status pending">⏳ En attente</span>
-                                <div class="product-actions">
-                                    <button class="btn btn-success btn-sm" onclick="previewProduct(${p.id}, ${p.shopId})"><i class="fas fa-eye"></i></button>
-                                    <button class="btn btn-success btn-sm" onclick="approveProduct(${p.id}, ${p.shopId})"><i class="fas fa-check"></i></button>
-                                    <button class="btn btn-danger btn-sm" onclick="rejectProduct(${p.id}, ${p.shopId})"><i class="fas fa-times"></i></button>
-                                </div>
-                            </div>
-                        `;
-            }).join('');
-        }
-
-        function previewProduct(productId, shopId) {
-            const shop = shopsData.find(s => s.id === shopId);
-            if (!shop) return;
-            const product = shop.products.find(p => p.id === productId);
-            if (!product) return;
-
-            const firstImg = product.images && product.images.length > 0 ? product.images[0] : '📦';
-            const imgHtml = /^(https?:\/\/|data:image\/|blob:)/i.test(firstImg) ?
-                `<img src="${firstImg}" style="width:100%;max-height:400px;object-fit:contain;border-radius:var(--radius-sm);">` :
-                `<span style="font-size:4rem;">${firstImg}</span>`;
-
-            const frame = document.getElementById('previewModalFrame');
-            const actions = document.getElementById('previewModalIdActions');
-            if (frame) {
-                frame.src = '';
-                frame.style.display = 'none';
-            }
-            if (actions) actions.style.display = 'none';
-
-            document.getElementById('previewModalImage').src = '';
-            document.getElementById('previewModalImage').style.display = 'none';
-            document.getElementById('previewModalTitle').textContent = product.name;
-            document.getElementById('previewModalDetail').innerHTML = `
-                        <p><strong>Prix:</strong> ${product.price}</p>
-                        <p><strong>Catégorie:</strong> ${product.category || shop.category}</p>
-                        <p><strong>Boutique:</strong> ${shop.name}</p>
-                        <p><strong>Description:</strong> ${product.description}</p>
-                        <div style="margin-top:0.5rem;">${imgHtml}</div>
-                        <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">
-                            ${product.images && product.images.length > 1 ? product.images.map((img, i) => {
-                                const imgSrc = /^(https?:\/\/|data:image\/|blob:)/i.test(img) ? img : null;
-                                return imgSrc ? `<img src="${imgSrc}" style="width:60px;height:60px;object-fit:cover;border-radius:var(--radius-sm);border:2px solid var(--border-color);" alt="Image ${i+1}">` : `<span style="font-size:2rem;">${img}</span>`;
-                            }).join('') : ''}
-                        </div>
-                        <p style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-light);"><i class="fas fa-images"></i> ${product.images ? product.images.length : 0} images</p>
-                    `;
-            document.getElementById('previewModal').classList.add('active');
         }
 
         function closePreviewModal() {
+            if (typeof window.clearProductPreviewContext === 'function') window.clearProductPreviewContext();
             const frame = document.getElementById('previewModalFrame');
             const actions = document.getElementById('previewModalIdActions');
+            const productActions = document.getElementById('previewModalProductActions');
             const img = document.getElementById('previewModalImage');
             if (frame) {
                 frame.src = '';
                 frame.style.display = 'none';
             }
             if (actions) actions.style.display = 'none';
+            if (productActions) productActions.style.display = 'none';
             if (img) {
                 img.src = '';
                 img.style.display = 'block';
             }
             document.getElementById('previewModal').classList.remove('active');
-        }
-
-        function approveProduct(productId, shopId) {
-            const shop = shopsData.find(s => s.id === shopId);
-            if (!shop) return;
-            const product = shop.products.find(p => p.id === productId);
-            if (!product) return;
-            product.approved = true;
-            product.rejectionReason = null;
-            renderProductModeration();
-            renderShops();
-            updateHeroStats();
-            showToast('success', '✅ Produit approuvé', `"${product.name}" est maintenant visible sur la marketplace.`);
-            // Notifier le vendeur (simulé)
-            if (shop.ownerEmail) {
-                console.log(`Notification à ${shop.ownerEmail}: Votre produit "${product.name}" a été approuvé.`);
-            }
-        }
-
-        function rejectProduct(productId, shopId) {
-            const reason = prompt('Veuillez indiquer le motif du rejet :');
-            if (reason === null) return; // Annulé
-            if (!reason.trim()) {
-                showToast('error', '⚠️ Erreur', 'Veuillez indiquer un motif de rejet.');
-                return;
-            }
-            const shop = shopsData.find(s => s.id === shopId);
-            if (!shop) return;
-            const product = shop.products.find(p => p.id === productId);
-            if (!product) return;
-            product.approved = false;
-            product.rejectionReason = reason.trim();
-            renderProductModeration();
-            showToast('error', '❌ Produit rejeté',
-                `"${product.name}" a été rejeté. Motif: ${product.rejectionReason}`);
-            // Notifier le vendeur (simulé)
-            if (shop.ownerEmail) {
-                console.log(
-                    `Notification à ${shop.ownerEmail}: Votre produit "${product.name}" a été rejeté. Motif: ${product.rejectionReason}`
-                    );
-            }
         }
 
         // ================================================================
@@ -10261,7 +10146,8 @@ SCRIPT COMPLET
             'removeAdBanner', 'addAgent', 'toggleAgent', 'deleteAgent',
             'saveSponsorPricing', 'removeLogo', 'createNewShop',
             'addCategorySponsor', 'toggleCategorySponsor', 'deleteCategorySponsor',
-            'approveProduct', 'rejectProduct', 'previewIdCard', 'verifyIdFromPreview'
+            'approveProduct', 'rejectProduct', 'previewIdCard', 'verifyIdFromPreview',
+            'previewProduct', 'approveProductFromPreview', 'rejectProductFromPreview'
         ].forEach(name => { window[name] = backendPending; });
         shopsData = [];
         agentsData = [];

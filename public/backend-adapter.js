@@ -330,7 +330,14 @@ function normalizeCategoryBanner(banner) {
 function normalizeAdminProduct(product) {
   const backendId = String(product.id || product.productId);
   const shopBackendId = String(product.shopId || "unknown");
-  return normalizeProduct({ ...product, id: backendId }, shopBackendId);
+  const normalized = normalizeProduct({ ...product, id: backendId }, shopBackendId);
+  const shop = ui.getState().shops.find(s => s.backendId === shopBackendId);
+  return {
+    ...normalized,
+    shopBackendId,
+    shopName: product.shopName || shop?.name || "",
+    shopClientId: shop?.id ?? null
+  };
 }
 
 function applyPublicShops(extraShop = null) {
@@ -1020,6 +1027,144 @@ function productByClientId(clientId, shopClientId) {
     || ui.getState().shops.flatMap(shop => shop.products || []).find(product => Number(product.id) === Number(clientId));
 }
 
+function resolveShopClientId(product) {
+  if (product?.shopClientId != null) return product.shopClientId;
+  const shop = ui.getState().shops.find(s =>
+    s.backendId === product?.shopBackendId ||
+    s.backendId === product?.shopId ||
+    (product?.shopName && s.name === product.shopName)
+  );
+  return shop?.id ?? null;
+}
+
+function productImageMarkup(image, className = "") {
+  const src = String(image || "");
+  if (/^(https?:\/\/|data:image\/|blob:)/i.test(src)) {
+    return `<img src="${src}" alt="" class="${className}" style="width:100%;height:100%;object-fit:cover;">`;
+  }
+  return `<span style="font-size:1.5rem;">${src || "📦"}</span>`;
+}
+
+let productPreviewContext = null;
+
+function showProductPreviewModal(product, shopClientId) {
+  const modal = document.getElementById("previewModal");
+  const img = document.getElementById("previewModalImage");
+  const frame = document.getElementById("previewModalFrame");
+  const idActions = document.getElementById("previewModalIdActions");
+  const productActions = document.getElementById("previewModalProductActions");
+  if (!modal || !product) return;
+
+  productPreviewContext = { productId: product.id, shopClientId };
+  const images = Array.isArray(product.images) ? product.images : [];
+  const firstImg = images[0];
+  const hasImage = firstImg && /^(https?:\/\/|data:image\/|blob:)/i.test(String(firstImg));
+
+  if (frame) {
+    frame.src = "";
+    frame.style.display = "none";
+  }
+  if (idActions) idActions.style.display = "none";
+  if (productActions) productActions.style.display = "flex";
+
+  if (img) {
+    if (hasImage) {
+      img.src = firstImg;
+      img.style.display = "block";
+    } else {
+      img.src = "";
+      img.style.display = "none";
+    }
+  }
+
+  document.getElementById("previewModalTitle").textContent = product.name;
+  document.getElementById("previewModalDetail").innerHTML = `
+    <p><strong>Prix:</strong> ${product.price || `${product.priceAmount || 0} F`}</p>
+    <p><strong>Catégorie:</strong> ${product.category || product.shopCategory || "Non catégorisé"}</p>
+    <p><strong>Boutique:</strong> ${product.shopName || ""}</p>
+    <p><strong>Description:</strong> ${product.description || ""}</p>
+    <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">
+      ${images.map((image, index) => {
+        const src = String(image || "");
+        if (/^(https?:\/\/|data:image\/|blob:)/i.test(src)) {
+          return `<img src="${src}" style="width:88px;height:88px;object-fit:cover;border-radius:var(--radius-sm);border:2px solid var(--border-color);cursor:pointer;" alt="Image ${index + 1}" onclick="document.getElementById('previewModalImage').src='${src}';document.getElementById('previewModalImage').style.display='block';">`;
+        }
+        return `<span style="font-size:2rem;">${src || "📦"}</span>`;
+      }).join("")}
+    </div>
+    <p style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-light);"><i class="fas fa-images"></i> ${images.length} image(s)</p>
+  `;
+  modal.classList.add("active");
+}
+
+window.getPendingProducts = () => pendingProductsSnapshot.slice();
+
+window.previewProduct = (productId, shopClientId) => {
+  const product = productByClientId(productId, shopClientId);
+  if (!product) {
+    toast("error", "Produit introuvable", "Ce produit n'est plus disponible pour modération.");
+    return;
+  }
+  showProductPreviewModal(product, shopClientId ?? resolveShopClientId(product));
+};
+
+window.approveProductFromPreview = () => {
+  if (!productPreviewContext) return;
+  const { productId, shopClientId } = productPreviewContext;
+  productPreviewContext = null;
+  document.getElementById("previewModal")?.classList.remove("active");
+  window.approveProduct(productId, shopClientId);
+};
+
+window.rejectProductFromPreview = () => {
+  if (!productPreviewContext) return;
+  const { productId, shopClientId } = productPreviewContext;
+  productPreviewContext = null;
+  document.getElementById("previewModal")?.classList.remove("active");
+  window.rejectProduct(productId, shopClientId);
+};
+
+window.clearProductPreviewContext = () => {
+  productPreviewContext = null;
+};
+
+window.renderProductModeration = () => {
+  const list = document.getElementById("productModerationList");
+  if (!list) return;
+
+  const pendingProducts = window.getPendingProducts().map(product => ({
+    ...product,
+    shopClientId: resolveShopClientId(product)
+  }));
+
+  if (pendingProducts.length === 0) {
+    list.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:1rem 0;">Aucun produit en attente de validation.</p>';
+    return;
+  }
+
+  list.innerHTML = pendingProducts.map(product => `
+    <div class="product-item">
+      <div class="product-preview" onclick="previewProduct(${product.id}, ${product.shopClientId ?? "null"})" style="cursor:pointer;" title="Voir le produit">
+        ${productImageMarkup(product.images?.[0])}
+      </div>
+      <div class="product-info">
+        <div class="product-name">${product.name}</div>
+        <div class="product-detail">${product.price} • ${product.category || "Non catégorisé"} • Boutique: ${product.shopName || ""}</div>
+        <div class="product-detail" style="font-size:0.65rem;color:var(--text-light);">${String(product.description || "").substring(0, 80)}${String(product.description || "").length > 80 ? "..." : ""}</div>
+        <button type="button" class="btn btn-secondary btn-sm" style="margin-top:0.35rem;width:auto;padding:0.25rem 0.6rem;font-size:0.65rem;" onclick="previewProduct(${product.id}, ${product.shopClientId ?? "null"})">
+          <i class="fas fa-eye"></i> Voir le produit
+        </button>
+      </div>
+      <span class="product-status pending">⏳ En attente</span>
+      <div class="product-actions">
+        <button type="button" class="btn btn-success btn-sm" onclick="previewProduct(${product.id}, ${product.shopClientId ?? "null"})" title="Voir puis valider"><i class="fas fa-eye"></i></button>
+        <button type="button" class="btn btn-success btn-sm" onclick="approveProduct(${product.id}, ${product.shopClientId ?? "null"})"><i class="fas fa-check"></i></button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="rejectProduct(${product.id}, ${product.shopClientId ?? "null"})"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+  `).join("");
+};
+
 function categoryBannerByClientId(clientId) {
   const fromState = (ui.getState().categorySponsors || ui.getState().categoryBanners || [])
     .find(banner => Number(banner.id) === Number(clientId));
@@ -1059,9 +1204,11 @@ function showIdentityPreviewModal(shop, blobUrl) {
   const img = document.getElementById("previewModalImage");
   const frame = document.getElementById("previewModalFrame");
   const actions = document.getElementById("previewModalIdActions");
+  const productActions = document.getElementById("previewModalProductActions");
   if (!modal || !img || !shop || !blobUrl) return;
 
   identityPreviewShopId = shop.id;
+  productPreviewContext = null;
   const isPdf = isPdfIdentityUrl(shop.idCardUrl || shop.idCard);
   if (frame) {
     frame.style.display = isPdf ? "block" : "none";
@@ -1078,6 +1225,7 @@ function showIdentityPreviewModal(shop, blobUrl) {
     ${shop.agentCode ? `<p><strong>Agent:</strong> ${shop.agentCode}</p>` : ""}
   `;
   if (actions) actions.style.display = shop.idVerified ? "none" : "flex";
+  if (productActions) productActions.style.display = "none";
   modal.classList.add("active");
 }
 
