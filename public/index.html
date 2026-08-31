@@ -4050,8 +4050,8 @@
         }
 
         .admin-id-list .admin-id-item .id-preview {
-            width: 50px;
-            height: 35px;
+            width: 72px;
+            height: 52px;
             border-radius: var(--radius-sm);
             background: var(--bg-dark);
             display: flex;
@@ -5021,6 +5021,29 @@
             object-fit: contain;
             border-radius: var(--radius-sm);
             background: var(--bg-light);
+            margin-bottom: 0.8rem;
+        }
+
+        .modal-content .modal-frame {
+            width: 100%;
+            min-height: 420px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            margin-bottom: 0.8rem;
+            display: none;
+        }
+
+        .modal-id-actions {
+            display: none;
+            gap: 0.6rem;
+            margin-top: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .modal-id-actions .btn {
+            flex: 1;
+            min-width: 140px;
+            justify-content: center;
         }
 
         .modal-content .modal-title {
@@ -5050,8 +5073,17 @@
         <div class="modal-content">
             <button class="modal-close" onclick="closePreviewModal()">×</button>
             <img class="modal-image" id="previewModalImage" src="" alt="Prévisualisation">
+            <iframe class="modal-frame" id="previewModalFrame" title="Pièce d'identité PDF"></iframe>
             <div class="modal-title" id="previewModalTitle">Titre</div>
             <div class="modal-detail" id="previewModalDetail">Détails</div>
+            <div class="modal-id-actions" id="previewModalIdActions">
+                <button type="button" class="btn btn-success btn-sm" onclick="verifyIdFromPreview(true)">
+                    <i class="fas fa-check"></i> Approuver
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="verifyIdFromPreview(false)">
+                    <i class="fas fa-times"></i> Rejeter
+                </button>
+            </div>
         </div>
     </div>
 
@@ -5456,7 +5488,7 @@
                             <div class="upload-btn-wrapper" style="border:none;padding:0.4rem;">
                                 <span class="upload-icon"><i class="fas fa-id-card"></i></span>
                                 Charger votre pièce d'identité (CNI, Passeport)
-                                <input type="file" id="registerIdCard" accept="image/*">
+                                <input type="file" id="registerIdCard" accept="image/*,.pdf,application/pdf">
                             </div>
                             <div id="idCardPreview" style="margin-top:0.5rem;display:none;">
                                 <div style="display:flex;align-items:center;gap:0.5rem;background:var(--bg-light);padding:0.4rem 0.8rem;border-radius:var(--radius-sm);">
@@ -5961,7 +5993,7 @@
             <!-- Gestion des pièces d'identité -->
             <div class="admin-panel">
                 <h3><i class="fas fa-id-card"></i> Vérification des pièces d'identité</h3>
-                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Validez ou rejetez les pièces d'identité des commerçants.</p>
+                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Cliquez sur l'aperçu ou sur « Voir le document » pour consulter la pièce d'identité avant d'approuver ou de rejeter.</p>
                 <div class="admin-id-list" id="adminIdList"></div>
             </div>
 
@@ -8072,6 +8104,14 @@ SCRIPT COMPLET
                 `<img src="${firstImg}" style="width:100%;max-height:400px;object-fit:contain;border-radius:var(--radius-sm);">` :
                 `<span style="font-size:4rem;">${firstImg}</span>`;
 
+            const frame = document.getElementById('previewModalFrame');
+            const actions = document.getElementById('previewModalIdActions');
+            if (frame) {
+                frame.src = '';
+                frame.style.display = 'none';
+            }
+            if (actions) actions.style.display = 'none';
+
             document.getElementById('previewModalImage').src = '';
             document.getElementById('previewModalImage').style.display = 'none';
             document.getElementById('previewModalTitle').textContent = product.name;
@@ -8093,6 +8133,18 @@ SCRIPT COMPLET
         }
 
         function closePreviewModal() {
+            const frame = document.getElementById('previewModalFrame');
+            const actions = document.getElementById('previewModalIdActions');
+            const img = document.getElementById('previewModalImage');
+            if (frame) {
+                frame.src = '';
+                frame.style.display = 'none';
+            }
+            if (actions) actions.style.display = 'none';
+            if (img) {
+                img.src = '';
+                img.style.display = 'block';
+            }
             document.getElementById('previewModal').classList.remove('active');
         }
 
@@ -9366,7 +9418,7 @@ SCRIPT COMPLET
         function renderIdList() {
             const list = document.getElementById('adminIdList');
             if (!list) return;
-            const pendingIds = shopsData.filter(s => !s.idVerified);
+            const pendingIds = shopsData.filter(s => !s.idVerified && (s.idCardUrl || s.idCardPath || s.idCard));
             if (pendingIds.length === 0) {
                 list.innerHTML =
                     '<p style="color:var(--text-light);text-align:center;padding:1rem 0;">Toutes les pièces d\'identité sont vérifiées.</p>';
@@ -9374,75 +9426,25 @@ SCRIPT COMPLET
             }
             list.innerHTML = pendingIds.map(shop => `
                             <div class="admin-id-item">
-                                <div class="id-preview" data-id-card-url="${shop.idCardUrl || shop.idCard || ''}" onclick="previewIdCard(${shop.id})">
+                                <div class="id-preview" data-id-card-url="${shop.idCardUrl || shop.idCard || ''}" onclick="previewIdCard(${shop.id})" title="Voir le document">
                                     ${shop.idCardUrl || shop.idCard ? '' : '📄'}
                                 </div>
                                 <div class="id-info">
                                     <div class="id-name">${shop.name}</div>
-                                    <div class="id-detail">${shop.email || shop.ownerEmail || ''} • ${shop.phone} • ${shop.openingFor === 'myself' ? 'Pour moi-même' : 'Pour un tiers'} ${shop.agentCode ? '• Agent: ' + shop.agentCode : ''}</div>
+                                    <div class="id-detail">${shop.ownerEmail || shop.email || ''} • ${shop.phone} • ${shop.openingFor === 'myself' ? 'Pour moi-même' : 'Pour un tiers'} ${shop.agentCode ? '• Agent: ' + shop.agentCode : ''}</div>
+                                    <button type="button" class="btn btn-secondary btn-sm" style="margin-top:0.35rem;width:auto;padding:0.25rem 0.6rem;font-size:0.65rem;" onclick="previewIdCard(${shop.id})">
+                                        <i class="fas fa-eye"></i> Voir le document
+                                    </button>
                                 </div>
                                 <span class="id-status pending">En attente</span>
                                 <div class="id-actions">
-                                    <button class="btn btn-success btn-sm" onclick="verifyId(${shop.id}, true)"><i class="fas fa-check"></i></button>
-                                    <button class="btn btn-danger btn-sm" onclick="verifyId(${shop.id}, false)"><i class="fas fa-times"></i></button>
+                                    <button type="button" class="btn btn-success btn-sm" onclick="previewIdCard(${shop.id});" title="Voir puis approuver"><i class="fas fa-eye"></i></button>
+                                    <button type="button" class="btn btn-success btn-sm" onclick="verifyId(${shop.id}, true)"><i class="fas fa-check"></i></button>
+                                    <button type="button" class="btn btn-danger btn-sm" onclick="verifyId(${shop.id}, false)"><i class="fas fa-times"></i></button>
                                 </div>
                             </div>
                         `).join('');
             if (typeof window.loadIdentityPreviews === 'function') window.loadIdentityPreviews();
-        }
-
-        async function previewIdCard(shopId) {
-            const shop = shopsData.find(s => Number(s.id) === Number(shopId));
-            const rawUrl = shop?.idCardUrl || shop?.idCard;
-            if (!shop || !rawUrl) {
-                showToast('error', '⚠️ Erreur', 'Aucune pièce d\'identité disponible.');
-                return;
-            }
-            let previewSrc = rawUrl;
-            if (String(rawUrl).includes('/uploads/identity/')) {
-                try {
-                    const response = await fetch(rawUrl, {
-                        headers: { Authorization: `Bearer ${sessionStorage.getItem('senekoJwt') || localStorage.getItem('senekoJwt') || ''}` }
-                    });
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        previewSrc = URL.createObjectURL(blob);
-                    }
-                } catch (error) {
-                    console.warn('ID preview fetch failed', error);
-                }
-            }
-            document.getElementById('previewModalImage').src = previewSrc;
-            document.getElementById('previewModalImage').style.display = 'block';
-            document.getElementById('previewModalTitle').textContent = `Pièce d'identité - ${shop.name}`;
-            document.getElementById('previewModalDetail').innerHTML = `
-                        <p><strong>Email:</strong> ${shop.email || shop.ownerEmail || ''}</p>
-                        <p><strong>Téléphone:</strong> ${shop.phone}</p>
-                        <p><strong>Ouverture:</strong> ${shop.openingFor === 'myself' ? 'Pour moi-même' : 'Pour un tiers'}</p>
-                        ${shop.agentCode ? `<p><strong>Agent:</strong> ${shop.agentCode}</p>` : ''}
-                    `;
-            document.getElementById('previewModal').classList.add('active');
-        }
-
-        function verifyId(shopId, verified) {
-            const shop = shopsData.find(s => s.id === shopId);
-            if (shop) {
-                shop.idVerified = verified;
-                if (verified) {
-                    shop.approved = true;
-                    shop.visible = true;
-                    showToast('success', '✅ Pièce d\'identité vérifiée', `"${shop.name}" est maintenant validé.`);
-                } else {
-                    shop.approved = false;
-                    shop.visible = false;
-                    showToast('error', '❌ Pièce d\'identité rejetée', `"${shop.name}" a été rejeté.`);
-                }
-                renderIdList();
-                updateAdminPanel();
-                renderShops();
-                generateBannersFromShops();
-                updateRentAlert();
-            }
         }
 
         // ================================================================
@@ -10259,7 +10261,7 @@ SCRIPT COMPLET
             'removeAdBanner', 'addAgent', 'toggleAgent', 'deleteAgent',
             'saveSponsorPricing', 'removeLogo', 'createNewShop',
             'addCategorySponsor', 'toggleCategorySponsor', 'deleteCategorySponsor',
-            'approveProduct', 'rejectProduct'
+            'approveProduct', 'rejectProduct', 'previewIdCard', 'verifyIdFromPreview'
         ].forEach(name => { window[name] = backendPending; });
         shopsData = [];
         agentsData = [];

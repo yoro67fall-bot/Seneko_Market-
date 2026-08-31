@@ -125,13 +125,21 @@ export async function adminListShops(request: HandlerRequest) {
     const input = parseInput(adminListSchema, request.data);
     const shops = await prisma.shop.findMany({
       where: { countryCode },
-      include: { products: { orderBy: { createdAt: "desc" }, take: 200 } },
+      include: {
+        products: { orderBy: { createdAt: "desc" }, take: 200 },
+        owner: { select: { email: true, firstname: true, lastname: true, phone: true } },
+      },
       orderBy: { id: "asc" },
       take: input.limit,
       ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
     });
     return {
-      shops: shops.map((shop) => privateShop(shop, shop.products)),
+      shops: shops.map((shop) => ({
+        ...privateShop(shop, shop.products),
+        ownerEmail: shop.owner.email,
+        ownerName: `${shop.owner.firstname} ${shop.owner.lastname}`.trim(),
+        ownerPhone: shop.owner.phone,
+      })),
       nextCursor: shops.length === input.limit ? (shops.at(-1)?.id ?? null) : null,
     };
   } catch (error) {

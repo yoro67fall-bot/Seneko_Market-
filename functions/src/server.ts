@@ -241,6 +241,16 @@ app.get("/uploads/identity/:uid/:filename", (request, response, next) => {
     if (!absolute.startsWith(root + path.sep) && absolute !== root) {
       throw new ApiError("permission-denied", "You cannot view this file.");
     }
+    const lower = filename.toLowerCase();
+    const contentType = lower.endsWith(".pdf")
+      ? "application/pdf"
+      : lower.endsWith(".png")
+        ? "image/png"
+        : lower.endsWith(".webp")
+          ? "image/webp"
+          : "image/jpeg";
+    response.setHeader("Content-Type", contentType);
+    response.setHeader("Cache-Control", "private, no-store");
     response.sendFile(absolute);
   } catch (error) {
     next(error);

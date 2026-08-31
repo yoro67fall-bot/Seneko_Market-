@@ -1027,31 +1027,106 @@ function categoryBannerByClientId(clientId) {
     || categoryBannersSnapshot.find(banner => Number(banner.id) === Number(clientId));
 }
 
+let identityPreviewShopId = null;
+const identityBlobCache = new Map();
+
+function isPdfIdentityUrl(url) {
+  return /\.pdf($|\?)/i.test(String(url || ""));
+}
+
 async function fetchIdentityBlobUrl(idCardUrl) {
   if (!idCardUrl) return null;
+  if (identityBlobCache.has(idCardUrl)) return identityBlobCache.get(idCardUrl);
+  if (!getToken()) return null;
   const response = await fetch(idCardUrl, {
-    headers: { Authorization: `Bearer ${getToken()}` }
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      "X-Platform-Country": services?.country || "SN"
+    }
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    console.warn("Identity preview failed", response.status, idCardUrl);
+    return null;
+  }
   const blob = await response.blob();
-  return URL.createObjectURL(blob);
+  const blobUrl = URL.createObjectURL(blob);
+  identityBlobCache.set(idCardUrl, blobUrl);
+  return blobUrl;
 }
+
+function showIdentityPreviewModal(shop, blobUrl) {
+  const modal = document.getElementById("previewModal");
+  const img = document.getElementById("previewModalImage");
+  const frame = document.getElementById("previewModalFrame");
+  const actions = document.getElementById("previewModalIdActions");
+  if (!modal || !img || !shop || !blobUrl) return;
+
+  identityPreviewShopId = shop.id;
+  const isPdf = isPdfIdentityUrl(shop.idCardUrl || shop.idCard);
+  if (frame) {
+    frame.style.display = isPdf ? "block" : "none";
+    frame.src = isPdf ? blobUrl : "";
+  }
+  img.style.display = isPdf ? "none" : "block";
+  img.src = isPdf ? "" : blobUrl;
+
+  document.getElementById("previewModalTitle").textContent = `Pièce d'identité - ${shop.name}`;
+  document.getElementById("previewModalDetail").innerHTML = `
+    <p><strong>Email:</strong> ${shop.ownerEmail || shop.email || ""}</p>
+    <p><strong>Téléphone:</strong> ${shop.phone || shop.ownerPhone || ""}</p>
+    <p><strong>Ouverture:</strong> ${shop.openingFor === "myself" ? "Pour moi-même" : "Pour un tiers"}</p>
+    ${shop.agentCode ? `<p><strong>Agent:</strong> ${shop.agentCode}</p>` : ""}
+  `;
+  if (actions) actions.style.display = shop.idVerified ? "none" : "flex";
+  modal.classList.add("active");
+}
+
+window.previewIdCard = async shopId => {
+  const shop = shopByClientId(shopId);
+  const idCardUrl = shop?.idCardUrl || shop?.idCard;
+  if (!shop || !idCardUrl || !String(idCardUrl).includes("/uploads/identity/")) {
+    toast("error", "Document indisponible", "Aucune pièce d'identité n'a été trouvée pour cette boutique.");
+    return;
+  }
+  if (!getToken()) {
+    toast("error", "Connexion requise", "Connectez-vous en admin pour consulter ce document.");
+    return;
+  }
+  const blobUrl = await fetchIdentityBlobUrl(idCardUrl);
+  if (!blobUrl) {
+    toast("error", "Accès refusé", "Impossible d'ouvrir le document. Vérifiez votre session admin.");
+    return;
+  }
+  showIdentityPreviewModal(shop, blobUrl);
+};
+
+window.verifyIdFromPreview = verified => {
+  if (identityPreviewShopId == null) return;
+  const shopId = identityPreviewShopId;
+  identityPreviewShopId = null;
+  const modal = document.getElementById("previewModal");
+  if (modal) modal.classList.remove("active");
+  window.verifyId(shopId, verified);
+};
 
 window.loadIdentityPreviews = async () => {
   const previews = document.querySelectorAll("[data-id-card-url]");
   await Promise.all(Array.from(previews).map(async node => {
     const url = node.getAttribute("data-id-card-url");
-    if (!url) return;
+    if (!url || !String(url).includes("/uploads/identity/")) {
+      node.textContent = "📄";
+      return;
+    }
     const blobUrl = await fetchIdentityBlobUrl(url);
     if (!blobUrl) {
-      if (!node.querySelector("img")) node.textContent = "📄 Aperçu indisponible";
+      node.innerHTML = '<span style="font-size:0.55rem;padding:0.2rem;text-align:center;">Voir</span>';
       return;
     }
-    if (node.tagName === "IMG") {
-      node.src = blobUrl;
+    if (isPdfIdentityUrl(url)) {
+      node.innerHTML = '<span style="font-size:0.55rem;font-weight:700;">PDF</span>';
       return;
     }
-    node.innerHTML = `<img src="${blobUrl}" alt="Pièce d'identité" style="max-width:100%;max-height:180px;border-radius:8px;">`;
+    node.innerHTML = `<img src="${blobUrl}" alt="Pièce d'identité">`;
   }));
 };
 
