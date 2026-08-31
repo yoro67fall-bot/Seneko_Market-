@@ -83,6 +83,8 @@ export function toIso(value: Date | string | null | undefined): string | null {
   return Number.isNaN(date.valueOf()) ? null : date.toISOString();
 }
 
+export const RENT_GRACE_DAY_OF_MONTH = 10;
+
 export function isRentCurrentlyPaid(
   shop: Pick<Shop, "rentPaid" | "rentPaidUntil">,
   now = new Date(),
@@ -90,7 +92,8 @@ export function isRentCurrentlyPaid(
   if (!shop.rentPaid) return false;
   if (!shop.rentPaidUntil) return true;
   if (shop.rentPaidUntil.valueOf() >= now.valueOf()) return true;
-  return now.getUTCDate() <= 10;
+  // Grace until the 10th: after rentPaidUntil, shop stays visible until day 10.
+  return now.getUTCDate() <= RENT_GRACE_DAY_OF_MONTH;
 }
 
 export function computeShopVisible(shop: Shop, now = new Date()): boolean {
@@ -113,20 +116,39 @@ export function isApprovedProduct(
   return product.approvalStatus === "approved";
 }
 
-export async function syncShopVisibility(now = new Date()): Promise<void> {
+export async function syncShopVisibility(now = new Date()): Promise<{
+  updated: number;
+  hidden: number;
+  restored: number;
+}> {
   const shops = await prisma.shop.findMany({ where: { deletedAt: null } });
+  let updated = 0;
+  let hidden = 0;
+  let restored = 0;
+
   await Promise.all(
     shops.map(async (shop) => {
       const rentStillValid = isRentCurrentlyPaid(shop, now);
       const shouldBeVisible = computeShopVisible(shop, now);
       const data: { visible?: boolean; rentPaid?: boolean } = {};
-      if (shop.visible !== shouldBeVisible) data.visible = shouldBeVisible;
-      if (shop.rentPaid && !rentStillValid) data.rentPaid = false;
+
+      if (shop.visible !== shouldBeVisible) {
+        data.visible = shouldBeVisible;
+        if (shouldBeVisible) restored += 1;
+        else if (shop.visible) hidden += 1;
+      }
+      if (shop.rentPaid && !rentStillValid) {
+        data.rentPaid = false;
+      }
+
       if (Object.keys(data).length > 0) {
         await prisma.shop.update({ where: { id: shop.id }, data });
+        updated += 1;
       }
     }),
   );
+
+  return { updated, hidden, restored };
 }
 
 function isActiveThrough(value: Date | null, now = new Date()): boolean {

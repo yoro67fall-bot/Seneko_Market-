@@ -1,4 +1,8 @@
-import { isRentCurrentlyPaid, syncShopVisibility } from "../data.js";
+import {
+  isRentCurrentlyPaid,
+  RENT_GRACE_DAY_OF_MONTH,
+  syncShopVisibility,
+} from "../data.js";
 import {
   sendWhatsAppNotification,
   shopContactPhone,
@@ -31,6 +35,12 @@ async function markReminderSent(shopId: string, now: Date): Promise<void> {
   });
 }
 
+export async function runVisibilitySyncJob(now = new Date()) {
+  const result = await syncShopVisibility(now);
+  console.log("visibility-sync: job complete", result);
+  return result;
+}
+
 export async function runRentReminderJob(now = new Date()): Promise<{
   skipped?: boolean;
   reason?: string;
@@ -38,11 +48,11 @@ export async function runRentReminderJob(now = new Date()): Promise<{
   reminded: number;
   alreadySent: number;
 }> {
-  if (now.getUTCDate() < 10) {
+  if (now.getUTCDate() < RENT_GRACE_DAY_OF_MONTH) {
     return { skipped: true, reason: "before_day_10", hidden: 0, reminded: 0, alreadySent: 0 };
   }
 
-  await syncShopVisibility(now);
+  const syncResult = await syncShopVisibility(now);
 
   const shops = await prisma.shop.findMany({
     where: { deletedAt: null, approved: true },
@@ -56,14 +66,11 @@ export async function runRentReminderJob(now = new Date()): Promise<{
     },
   });
 
-  let hidden = 0;
   let reminded = 0;
   let alreadySent = 0;
 
   for (const shop of shops) {
     if (isRentCurrentlyPaid(shop, now)) continue;
-
-    if (!shop.visible) hidden += 1;
 
     if (await wasReminderSentThisMonth(shop.id, now)) {
       alreadySent += 1;
@@ -78,21 +85,29 @@ export async function runRentReminderJob(now = new Date()): Promise<{
     if (sent) reminded += 1;
   }
 
-  console.log("rent-reminder: job complete", { hidden, reminded, alreadySent });
-  return { hidden, reminded, alreadySent };
+  console.log("rent-reminder: job complete", {
+    hidden: syncResult.hidden,
+    reminded,
+    alreadySent,
+  });
+  return { hidden: syncResult.hidden, reminded, alreadySent };
 }
 
-let lastRunKey = "";
+let lastReminderRunKey = "";
 
 export function startRentReminderScheduler(): void {
   const tick = () => {
     const now = new Date();
+    void runVisibilitySyncJob(now).catch((error) => {
+      console.error("visibility-sync: scheduled run failed", error);
+    });
+
     const runKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
-    if (now.getUTCDate() < 10 || runKey === lastRunKey) return;
-    lastRunKey = runKey;
+    if (now.getUTCDate() < RENT_GRACE_DAY_OF_MONTH || runKey === lastReminderRunKey) return;
+    lastReminderRunKey = runKey;
     void runRentReminderJob(now).catch((error) => {
       console.error("rent-reminder: scheduled run failed", error);
-      lastRunKey = "";
+      lastReminderRunKey = "";
     });
   };
 

@@ -61,8 +61,6 @@ export async function bootstrapPublic(request: HandlerRequest) {
     const where = {
       deletedAt: null,
       approved: true,
-      visible: true,
-      rentPaid: true,
       countryCode,
       ...(input.category ? { category: input.category } : {}),
       ...(input.shopId ? { id: input.shopId } : {}),

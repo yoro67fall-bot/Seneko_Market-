@@ -10,7 +10,7 @@ import { parsePlatformCountry } from "./country.js";
 import { ApiError, parseInput, type AuthContext, type HandlerRequest } from "./errors.js";
 import { bootstrapAdmin, loginUser, registerUser, verifyToken } from "./auth.js";
 import { prisma } from "./prisma.js";
-import { getPlatformConfig, serializeProfileWithShop } from "./data.js";
+import { getPlatformConfig, serializeProfileWithShop, syncShopVisibility } from "./data.js";
 import { loginSchema, registerSchema } from "./schemas.js";
 import { isIdentityPath, resolveUploadFile, saveUpload } from "./uploads.js";
 import { bootstrapPublic, getPublicShop, recordShopEvent } from "./callables/catalog.js";
@@ -48,7 +48,7 @@ import {
 } from "./callables/admin.js";
 import { nabooPayWebhook, senePayWebhook } from "./http/webhook.js";
 import { getCronSecret } from "./config.js";
-import { runRentReminderJob, startRentReminderScheduler } from "./jobs/rentReminders.js";
+import { runRentReminderJob, runVisibilitySyncJob, startRentReminderScheduler } from "./jobs/rentReminders.js";
 
 const CALLABLES: Record<string, (request: HandlerRequest) => Promise<unknown>> = {
   bootstrapPublic,
@@ -136,8 +136,9 @@ app.post("/cron/rent-reminders", async (request, response, next) => {
       response.status(401).json({ error: "unauthorized" });
       return;
     }
+    const visibility = await runVisibilitySyncJob();
     const result = await runRentReminderJob();
-    response.json({ ok: true, ...result });
+    response.json({ ok: true, visibility, ...result });
   } catch (error) {
     next(error);
   }
@@ -388,6 +389,8 @@ async function start(): Promise<void> {
   await ensureUploadRoot();
   try {
     await runMigrations();
+    await syncShopVisibility();
+    console.log("boot: shop visibility synced");
     await getPlatformConfig("SN");
     console.log("boot: platform config ready");
     await bootstrapAdmin();
