@@ -772,9 +772,9 @@
         }
 
         .btn-whatsapp {
-            background: var(--secondary-gradient);
+            background: var(--whatsapp-gradient);
             color: var(--bg-white);
-            box-shadow: 0 4px 16px rgba(230, 81, 0, 0.25);
+            box-shadow: 0 4px 16px rgba(27, 94, 32, 0.25);
         }
 
         .btn-white {
@@ -5279,20 +5279,6 @@
             </div>
         </section>
 
-        <!-- Notification WhatsApp -->
-        <section class="section">
-            <div class="container">
-                <div class="notification-section">
-                    <h3><i class="fab fa-whatsapp"></i> Rappels WhatsApp</h3>
-                    <p>Activez les notifications pour ne pas oublier de payer votre loyer.</p>
-                    <div class="whatsapp-number"><i class="fab fa-whatsapp"></i> +221 78 530 55 75</div>
-                    <button class="btn-whatsapp-notify" onclick="sendWhatsAppNotification()">
-                        <i class="fab fa-whatsapp"></i> Activer les notifications
-                    </button>
-                </div>
-            </div>
-        </section>
-
         <!-- Paiement -->
         <section class="section" id="payment">
             <div class="container">
@@ -6214,19 +6200,6 @@
                 </div>
             </div>
 
-            <div class="reminder-section" id="reminderSection">
-                <h4><i class="fab fa-whatsapp"></i> Rappels WhatsApp pour le loyer</h4>
-                <p>Recevez un rappel automatique 3 jours avant la date limite de paiement.</p>
-                <div class="reminder-number"><i class="fab fa-whatsapp"></i> +221 78 530 55 75</div>
-                <div style="margin-bottom:0.8rem;">
-                    <span class="reminder-status active" id="reminderStatus">
-                        <i class="fas fa-check-circle"></i> Rappels activés
-                    </span>
-                </div>
-                <button class="btn-reminder" onclick="toggleReminders()">
-                    <i class="fas fa-bell"></i> <span id="reminderBtnText">Désactiver les rappels</span>
-                </button>
-            </div>
         </div>
     </div>
 
@@ -6387,7 +6360,7 @@ FOOTER
                         </span>
                         Seneko Market
                     </h3>
-                    <p>Marketplace de mise en relation boutiques-acheteurs. Jusqu'à 10 images par produit.</p>
+                    <p>Marketplace de mise en relation directe</p>
                     <div class="social-links">
                         <a href="#"><i class="fab fa-facebook"></i></a>
                         <a href="#"><i class="fab fa-instagram"></i></a>
@@ -6994,7 +6967,7 @@ SCRIPT COMPLET
         // ================================================================
         let uploadedImages = [];
         let currentProductImages = [];
-        let remindersEnabled = true;
+        let remindersEnabled = false;
         let isLoggedIn = false;
         let currentUser = null;
         let visitsChart = null;
@@ -8710,57 +8683,7 @@ SCRIPT COMPLET
         }
 
         function updateReminderVisibility() {
-            const reminderSection = document.getElementById('reminderSection');
-            if (reminderSection) {
-                reminderSection.style.display = (isLoggedIn && currentUser && !isAdmin) ? 'block' : 'none';
-            }
-        }
-
-        // ================================================================
-        // RAPPELS WHATSAPP
-        // ================================================================
-        function toggleReminders() {
-            remindersEnabled = !remindersEnabled;
-            updateReminderUI();
-            if (remindersEnabled) {
-                showToast('success', '📱 Rappels activés', 'Vous recevrez un rappel 3 jours avant la date limite.');
-                setTimeout(() => {
-                    const phone = currentUser?.phone || '2217366262';
-                    const cleanPhone = phone.replace(/\s/g, '');
-                    const number = cleanPhone.startsWith('+') ? cleanPhone.substring(1) : cleanPhone;
-                    window.open(
-                        `https://wa.me/${number}?text=${encodeURIComponent('Bonjour ! Je confirme l\'activation des rappels WhatsApp pour mon paiement de loyer Seneko Market.')}`,
-                        '_blank');
-                }, 500);
-            } else {
-                showToast('info', '🔕 Rappels désactivés', 'Vous ne recevrez plus de rappels WhatsApp.');
-            }
-        }
-
-        function updateReminderUI() {
-            const status = document.getElementById('reminderStatus');
-            const btnText = document.getElementById('reminderBtnText');
-            if (remindersEnabled) {
-                status.className = 'reminder-status active';
-                status.innerHTML = '<i class="fas fa-check-circle"></i> Rappels activés';
-                btnText.textContent = 'Désactiver les rappels';
-            } else {
-                status.className = 'reminder-status inactive';
-                status.innerHTML = '<i class="fas fa-times-circle"></i> Rappels désactivés';
-                btnText.textContent = 'Activer les rappels';
-            }
-        }
-
-        function sendWhatsAppNotification() {
-            let phoneNumber = '2217366262';
-            if (isLoggedIn && currentUser && currentUser.phone) {
-                const cleanPhone = currentUser.phone.replace(/\s/g, '');
-                phoneNumber = cleanPhone.startsWith('+') ? cleanPhone.substring(1) : cleanPhone;
-            }
-            window.open(
-                `https://wa.me/${phoneNumber}?text=${encodeURIComponent('Bonjour ! Je souhaite activer les notifications WhatsApp pour mes rappels de paiement de loyer Seneko Market.')}`,
-                '_blank');
-            showToast('whatsapp', '📱 WhatsApp ouvert', 'Message préparé pour vos notifications.');
+            /* Automatic rent reminders run on the backend from the 10th of each month. */
         }
 
         // ================================================================
@@ -9795,15 +9718,6 @@ SCRIPT COMPLET
             updateRentAlert();
             showToast('success', '✅ Paiement effectué',
                 `Loyer payé via ${methodNames[selectedPaymentMethod]}. Votre boutique est maintenant active.`);
-            if (remindersEnabled && currentUser && currentUser.phone) {
-                const cleanPhone = currentUser.phone.replace(/\s/g, '');
-                const phoneNumber = cleanPhone.startsWith('+') ? cleanPhone.substring(1) : cleanPhone;
-                setTimeout(() => {
-                    window.open(
-                        `https://wa.me/${phoneNumber}?text=${encodeURIComponent('✅ Paiement du loyer Seneko Market effectué avec succès. Votre boutique est maintenant active !')}`,
-                        '_blank');
-                }, 1000);
-            }
             updateAdminPanel();
         }
 

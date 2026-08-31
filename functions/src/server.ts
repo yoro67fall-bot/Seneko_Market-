@@ -46,6 +46,8 @@ import {
   adminDeleteCategoryBanner,
 } from "./callables/admin.js";
 import { nabooPayWebhook, senePayWebhook } from "./http/webhook.js";
+import { getCronSecret } from "./config.js";
+import { runRentReminderJob, startRentReminderScheduler } from "./jobs/rentReminders.js";
 
 const CALLABLES: Record<string, (request: HandlerRequest) => Promise<unknown>> = {
   bootstrapPublic,
@@ -121,6 +123,22 @@ app.use(
 
 app.get("/health", (_request, response) => {
   response.json({ ok: true, service: "seneko-market-api" });
+});
+
+app.post("/cron/rent-reminders", async (request, response, next) => {
+  try {
+    const secret = getCronSecret();
+    const provided =
+      String(request.get("x-cron-secret") || request.query.secret || "").trim();
+    if (!secret || provided !== secret) {
+      response.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const result = await runRentReminderJob();
+    response.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post("/webhooks/naboopay", (request, response) => {
@@ -345,6 +363,8 @@ async function start(): Promise<void> {
     console.log("boot: platform config ready");
     await bootstrapAdmin();
     console.log("boot: admin ready");
+    startRentReminderScheduler();
+    console.log("boot: rent reminder scheduler ready");
   } catch (error) {
     console.error("boot: database init failed", error);
   }

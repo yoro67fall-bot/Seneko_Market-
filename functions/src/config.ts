@@ -131,3 +131,7 @@ export function getAdminEmail(): string {
 export function getAdminPassword(): string {
   return env("ADMIN_PASSWORD");
 }
+
+export function getCronSecret(): string {
+  return env("CRON_SECRET");
+}
