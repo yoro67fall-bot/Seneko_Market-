@@ -940,6 +940,45 @@ window.markRentUnpaid = shopId => runAction(async () => {
   toast("success", "Loyer mis à jour", `Le loyer de "${shop.name}" est marqué impayé.`);
 }, "Mise à jour impossible");
 
+window.deleteShopAdmin = shopId => runAction(async () => {
+  const shop = shopByClientId(shopId);
+  if (!shop) throw new Error("Boutique introuvable.");
+  const confirmed = confirm(
+    `Supprimer la boutique « ${shop.name} » ?\n\nLa boutique sera masquée et retirée des listes. Le compte du commerçant sera conservé.`
+  );
+  if (!confirmed) return;
+  await backend("adminDeleteShop", { shopId: shop.backendId });
+  await refreshCurrentData();
+  toast("success", "Boutique supprimée", `"${shop.name}" a été supprimée.`);
+}, "Suppression impossible");
+
+window.deleteAccountAdmin = shopId => runAction(async () => {
+  const shop = shopByClientId(shopId);
+  if (!shop) throw new Error("Boutique introuvable.");
+  if (!shop.ownerUid) throw new Error("Aucun compte associé à cette boutique.");
+  const confirmed = confirm(
+    `Supprimer définitivement le compte de « ${shop.ownerEmail || shop.ownerUid} » ?\n\nCette action est irréversible. Toutes les boutiques et données du commerçant seront perdues.`
+  );
+  if (!confirmed) return;
+  const doubleCheck = confirm("Confirmez la suppression définitive du compte.");
+  if (!doubleCheck) return;
+  await backend("adminDeleteUser", { userId: shop.ownerUid });
+  await refreshCurrentData();
+  toast("success", "Compte supprimé", "Le compte commerçant a été supprimé.");
+}, "Suppression impossible");
+
+window.deleteProductAdmin = (productId, shopId) => runAction(async () => {
+  const product = productByClientId(productId, shopId);
+  if (!product) throw new Error("Produit introuvable.");
+  const confirmed = confirm(
+    `Supprimer définitivement le produit « ${product.name} » ?\n\nCette action est irréversible.`
+  );
+  if (!confirmed) return;
+  await backend("adminDeleteProduct", { productId: product.backendId });
+  await refreshCurrentData();
+  toast("success", "Produit supprimé", `"${product.name}" a été supprimé.`);
+}, "Suppression impossible");
+
 window.verifyId = (shopId, verified) => runAction(async () => {
   const shop = shopByClientId(shopId);
   if (!shop) throw new Error("Boutique introuvable.");
@@ -1196,6 +1235,7 @@ window.renderProductModeration = () => {
         <button type="button" class="btn btn-success btn-sm" onclick="previewProduct(${product.id}, ${product.shopClientId ?? "null"})" title="Voir puis valider"><i class="fas fa-eye"></i></button>
         <button type="button" class="btn btn-success btn-sm" onclick="approveProduct(${product.id}, ${product.shopClientId ?? "null"})"><i class="fas fa-check"></i></button>
         <button type="button" class="btn btn-danger btn-sm" onclick="rejectProduct(${product.id}, ${product.shopClientId ?? "null"})"><i class="fas fa-times"></i></button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="deleteProductAdmin(${product.id}, ${product.shopClientId ?? "null"})" title="Supprimer le produit"><i class="fas fa-trash"></i></button>
       </div>
     </div>
   `).join("");

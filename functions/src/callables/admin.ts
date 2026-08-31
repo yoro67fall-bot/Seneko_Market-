@@ -23,8 +23,11 @@ import {
   adminReviewSellerSchema,
   adminShopStatusSchema,
   adminVerifyIdentitySchema,
+  adminUserIdSchema,
+  adminProductIdSchema,
   changePasswordSchema,
   emptySchema,
+  shopIdSchema,
 } from "../schemas.js";
 import { prisma } from "../prisma.js";
 import {
@@ -142,7 +145,7 @@ export async function adminListShops(request: HandlerRequest) {
     const countryCode = requireCountry(request);
     const input = parseInput(adminListSchema, request.data);
     const shops = await prisma.shop.findMany({
-      where: { countryCode },
+      where: { countryCode, deletedAt: null },
       include: {
         products: { orderBy: { createdAt: "desc" }, take: 200 },
         owner: { select: { email: true, firstname: true, lastname: true, phone: true } },
@@ -686,6 +689,81 @@ export async function adminChangePassword(request: HandlerRequest) {
     const input = parseInput(changePasswordSchema, request.data);
     await changeUserPassword(adminUid, input.currentPassword, input.newPassword);
     return { changed: true };
+  } catch (error) {
+    throw asApiError(error);
+  }
+}
+
+export async function adminDeleteShop(request: HandlerRequest) {
+  try {
+    await requireCountryAdmin(request);
+    const countryCode = requireCountry(request);
+    const { shopId } = parseInput(shopIdSchema, request.data);
+    const shop = await requireShop(shopId, countryCode);
+    await prisma.$transaction([
+      prisma.shop.update({
+        where: { id: shopId },
+        data: {
+          visible: false,
+          adminVisible: false,
+          sponsored: false,
+          deletedAt: new Date(),
+          nameNormalized: `${shop.nameNormalized}-deleted-${shop.id.slice(-6)}`,
+        },
+      }),
+      prisma.user.update({
+        where: { id: shop.ownerId },
+        data: { onboardingCompleted: false },
+      }),
+    ]);
+    return { deleted: true };
+  } catch (error) {
+    throw asApiError(error);
+  }
+}
+
+export async function adminDeleteUser(request: HandlerRequest) {
+  try {
+    const adminUid = await requireCountryAdmin(request);
+    const countryCode = requireCountry(request);
+    const { userId } = parseInput(adminUserIdSchema, request.data);
+    if (userId === adminUid) {
+      throw new ApiError(
+        "permission-denied",
+        "You cannot delete your own administrator account.",
+      );
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.countryCode !== countryCode) {
+      throw new ApiError("not-found", "Account not found.");
+    }
+    if (user.role === "admin") {
+      throw new ApiError(
+        "permission-denied",
+        "Administrator accounts cannot be deleted.",
+      );
+    }
+    await prisma.user.delete({ where: { id: userId } });
+    return { deleted: true };
+  } catch (error) {
+    throw asApiError(error);
+  }
+}
+
+export async function adminDeleteProduct(request: HandlerRequest) {
+  try {
+    await requireCountryAdmin(request);
+    const countryCode = requireCountry(request);
+    const { productId } = parseInput(adminProductIdSchema, request.data);
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { shop: true },
+    });
+    if (!product || product.shop.countryCode !== countryCode) {
+      throw new ApiError("not-found", "Product not found.");
+    }
+    await prisma.product.delete({ where: { id: productId } });
+    return { deleted: true };
   } catch (error) {
     throw asApiError(error);
   }

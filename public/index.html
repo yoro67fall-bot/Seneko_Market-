@@ -6144,7 +6144,7 @@
             <!-- Gestion des boutiques -->
             <div class="admin-panel">
                 <h3><i class="fas fa-store"></i> Gestion des boutiques</h3>
-                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Validez ou refusez les ouvertures de boutiques.</p>
+                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Validez, refusez ou supprimez les boutiques et les comptes commerçants.</p>
                 <div class="admin-shop-list" id="adminShopList"></div>
             </div>
 
@@ -9340,8 +9340,12 @@ SCRIPT COMPLET
             shopsData.forEach(shop => {
                 const statusClass = shop.approved === false ? 'pending' : 'approved';
                 const statusText = shop.approved === false ? '⏳ En attente' : '✅ Validé';
-                const visibleText = shop.visible !== false ? '👁️ Visible' : '🔒 Masqué';
+                const visibleText = shop.visible !== false ? '👁️ Visible' : '🔒 Masquée';
                 const rentText = shop.rentPaid ? '💰 Payé' : '💸 Impayé';
+                const deleteActions = `
+                    <button class="btn btn-danger btn-sm" onclick="deleteShopAdmin(${shop.id})" title="Supprimer la boutique"><i class="fas fa-trash"></i></button>
+                    ${shop.ownerUid ? `<button class="btn btn-danger btn-sm" onclick="deleteAccountAdmin(${shop.id})" title="Supprimer le compte"><i class="fas fa-user-times"></i></button>` : ''}
+                `;
                 const item = document.createElement('div');
                 item.className = 'admin-shop-item';
                 item.innerHTML = `
@@ -9354,6 +9358,7 @@ SCRIPT COMPLET
                                     ${shop.approved === false ? `
                                         <button class="btn btn-success btn-sm" onclick="approveShop(${shop.id})"><i class="fas fa-check"></i></button>
                                         <button class="btn btn-danger btn-sm" onclick="rejectShop(${shop.id})"><i class="fas fa-times"></i></button>
+                                        ${deleteActions}
                                     ` : `
                                         <button class="btn btn-edit btn-sm" onclick="toggleShopVisibility(${shop.id})">
                                             ${shop.visible !== false ? '🔒 Masquer' : '👁️ Afficher'}
@@ -9361,6 +9366,7 @@ SCRIPT COMPLET
                                         <button class="btn btn-sponsor btn-sm" onclick="toggleSponsor(${shop.id})" style="padding:0.2rem 0.5rem;font-size:0.6rem;">
                                             ${shop.sponsored ? '⭐ Retirer' : '⭐ Sponsoriser'}
                                         </button>
+                                        ${deleteActions}
                                     `}
                                 </div>
                             `;
@@ -9386,6 +9392,8 @@ SCRIPT COMPLET
                                     ` : `
                                         <button class="btn btn-danger btn-sm" onclick="markRentUnpaid(${shop.id})"><i class="fas fa-times"></i> Impayé</button>
                                     `}
+                                    <button class="btn btn-danger btn-sm" onclick="deleteShopAdmin(${shop.id})" title="Supprimer la boutique"><i class="fas fa-trash"></i></button>
+                                    ${shop.ownerUid ? `<button class="btn btn-danger btn-sm" onclick="deleteAccountAdmin(${shop.id})" title="Supprimer le compte"><i class="fas fa-user-times"></i></button>` : ''}
                                 </div>
                             `;
                 rentList.appendChild(item);
@@ -10430,7 +10438,7 @@ SCRIPT COMPLET
             'addCategorySponsor', 'toggleCategorySponsor', 'deleteCategorySponsor',
             'approveProduct', 'rejectProduct', 'previewIdCard', 'verifyIdFromPreview',
             'previewProduct', 'approveProductFromPreview', 'rejectProductFromPreview',
-            'changeAdminPassword'
+            'changeAdminPassword', 'deleteShopAdmin', 'deleteAccountAdmin', 'deleteProductAdmin'
         ].forEach(name => { window[name] = backendPending; });
         shopsData = [];
         agentsData = [];

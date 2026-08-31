@@ -295,6 +295,14 @@ export const adminMarkRentSchema = z
   })
   .strict();
 
+export const adminUserIdSchema = z
+  .object({ userId: z.string().trim().min(1).max(128) })
+  .strict();
+
+export const adminProductIdSchema = z
+  .object({ productId: z.string().trim().min(1).max(128) })
+  .strict();
+
 export const adminVerifyIdentitySchema = z
   .object({
     shopId: z.string().trim().min(1).max(128),

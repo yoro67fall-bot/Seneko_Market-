@@ -45,6 +45,9 @@ import {
   adminUpsertCategoryBanner,
   adminDeleteCategoryBanner,
   adminChangePassword,
+  adminDeleteShop,
+  adminDeleteUser,
+  adminDeleteProduct,
 } from "./callables/admin.js";
 import { nabooPayWebhook, senePayWebhook } from "./http/webhook.js";
 import { getCronSecret } from "./config.js";
@@ -80,6 +83,9 @@ const CALLABLES: Record<string, (request: HandlerRequest) => Promise<unknown>> =
   adminUpsertCategoryBanner,
   adminDeleteCategoryBanner,
   adminChangePassword,
+  adminDeleteShop,
+  adminDeleteUser,
+  adminDeleteProduct,
 };
 
 const HTTP_STATUS: Record<string, number> = {
