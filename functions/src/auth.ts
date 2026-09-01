@@ -101,17 +101,30 @@ export async function registerUser(
   if (input.password.length < 8) {
     throw new ApiError("invalid-argument", "The password must contain at least 8 characters.");
   }
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash: await bcrypt.hash(input.password, 12),
-      firstname: input.firstname ?? "",
-      lastname: input.lastname ?? "",
-      phone: input.phone ?? "",
-      countryCode,
-      role: email === getAdminEmail() ? "admin" : "merchant",
-    },
-  });
+  let user;
+  try {
+    user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash: await bcrypt.hash(input.password, 12),
+        firstname: input.firstname ?? "",
+        lastname: input.lastname ?? "",
+        phone: input.phone ?? "",
+        countryCode,
+        role: email === getAdminEmail() ? "admin" : "merchant",
+      },
+    });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      throw new ApiError("already-exists", "This email is already in use.");
+    }
+    throw error;
+  }
   return {
     token: signToken(user),
     profile: await serializeProfileWithShop(user.id),

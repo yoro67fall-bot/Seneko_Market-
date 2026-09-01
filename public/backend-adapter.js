@@ -37,12 +37,17 @@ function errorMessage(error) {
     return "L'image n'a pas pu être enregistrée. Réessayez avec une autre photo.";
   }
   if (/A file is required/i.test(raw)) return "Veuillez sélectionner une image.";
+  if (/shop name is already in use/i.test(raw)) {
+    return "Ce nom de boutique est déjà utilisé. Choisissez un autre nom.";
+  }
   if (code === "invalid-argument") return raw === "Invalid request data." ? "Requête invalide. Vérifiez les champs du formulaire." : raw;
   return raw;
 }
 
-async function runAction(action, title = "Erreur") {
-  const button = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+async function runAction(action, title = "Erreur", buttonOverride = null) {
+  const button = buttonOverride instanceof HTMLButtonElement
+    ? buttonOverride
+    : (document.activeElement instanceof HTMLButtonElement ? document.activeElement : null);
   if (button) button.disabled = true;
   try {
     return await action();
@@ -454,7 +459,19 @@ async function loadAccount({ navigate = false } = {}) {
     const ownShop = merged.shop ? normalizeShop(merged.shop) : null;
     applyPublicShops(ownShop);
     if (ownShop) ui.renderMerchant();
-    if (navigate) ui.showPage(ownShop ? "dashboard" : "auth");
+    if (navigate) {
+      if (ownShop) {
+        ui.showPage("dashboard");
+      } else {
+        ui.showPage("auth");
+        if (typeof window.switchAuthTab === "function") window.switchAuthTab("register");
+        toast(
+          "info",
+          "Finalisez votre inscription",
+          "Complétez les informations de votre boutique pour terminer l'inscription."
+        );
+      }
+    }
   }
   return { account: merged, admin };
 }
@@ -572,9 +589,50 @@ async function uploadToApi(file, kind, shopId) {
   return apiFetch("/uploads", { formData });
 }
 
+function isPdfFile(file) {
+  const type = String(file?.type || "").toLowerCase();
+  const name = String(file?.name || "").toLowerCase();
+  return type === "application/pdf" || name.endsWith(".pdf");
+}
+
 async function uploadPrivateIdentity(file) {
-  const saved = await uploadToApi(await compressImage(file), "identity");
+  const payload = isPdfFile(file) ? file : await compressImage(file);
+  const saved = await uploadToApi(payload, "identity");
   return saved.path;
+}
+
+async function ensureRegisteredUser({ email, password, firstname, lastname, phone }) {
+  const targetEmail = email.trim().toLowerCase();
+  if (getToken()) {
+    try {
+      const me = await apiFetch("/auth/me", { method: "GET" });
+      const sessionEmail = String(me?.profile?.email || me?.email || "").trim().toLowerCase();
+      if (sessionEmail && sessionEmail === targetEmail) {
+        return;
+      }
+      clearToken();
+    } catch {
+      clearToken();
+    }
+  }
+
+  try {
+    const registered = await apiFetch("/auth/register", {
+      body: { email, password, firstname, lastname, phone }
+    });
+    saveToken(registered.token, true);
+    return;
+  } catch (error) {
+    if (error?.code !== "already-exists") throw error;
+    try {
+      const loggedIn = await apiFetch("/auth/login", { body: { email, password } });
+      saveToken(loggedIn.token, true);
+    } catch {
+      throw new Error(
+        "Cette adresse email est déjà utilisée. Connectez-vous avec votre mot de passe existant."
+      );
+    }
+  }
 }
 
 async function uploadPublicDataUrl(dataUrl, kind, shopId) {
@@ -593,6 +651,8 @@ async function uploadImages(images, kind, shopId) {
   return Promise.all((images || []).map(image => uploadPublicDataUrl(image, kind, shopId)));
 }
 
+let registerInFlight = false;
+
 window.handleLogin = () => runAction(async () => {
   const email = document.getElementById("loginEmail").value.trim();
   const password = document.getElementById("loginPassword").value;
@@ -601,71 +661,90 @@ window.handleLogin = () => runAction(async () => {
   const result = await apiFetch("/auth/login", { body: { email, password } });
   saveToken(result.token, remember);
   const { admin } = await loadAccount({ navigate: true });
-  toast("success", admin ? "✅ Connexion admin" : "✅ Connexion réussie", "Bienvenue sur Seneko Market !");
-}, "Connexion impossible");
-
-window.handleRegister = () => runAction(async () => {
-  const firstname = document.getElementById("registerFirstname").value.trim();
-  const lastname = document.getElementById("registerLastname").value.trim();
-  const shopNameInput = document.getElementById("registerShopName");
-  const shopName = (shopNameInput?.value || `${firstname} ${lastname}`).trim();
-  const email = document.getElementById("registerEmail").value.trim();
-  const phone = document.getElementById("registerPhone").value.trim();
-  const password = document.getElementById("registerPassword").value;
-  const confirmPassword = document.getElementById("registerConfirm").value;
-  const category = document.getElementById("registerCategory").value;
-  const openingFor = document.getElementById("registerOpeningFor")?.value || "myself";
-  const agentCode = document.getElementById("registerAgentCode")?.value?.trim() || "";
-  const idFile = document.getElementById("registerIdCard").files[0];
-  const termsAccepted = document.querySelector("#form-register .form-options input[type=checkbox]")?.checked;
-
-  if (!firstname || !lastname || !shopName || !email || !phone || !category) {
-    throw new Error("Veuillez remplir tous les champs obligatoires.");
+  if (admin) {
+    toast("success", "✅ Connexion admin", "Bienvenue sur Seneko Market !");
+    return;
   }
-  if (!idFile) throw new Error("Veuillez charger votre pièce d'identité.");
-  if (!termsAccepted) throw new Error("Vous devez accepter les conditions d'utilisation.");
-  if (typeof window.isPasswordValid === "function" && !window.isPasswordValid(password)) {
-    throw new Error("Le mot de passe doit contenir 8 caractères, une majuscule et un caractère spécial.");
+  const account = await backend("getMyAccount");
+  if (account?.shop) {
+    toast("success", "✅ Connexion réussie", "Bienvenue sur Seneko Market !");
   }
+}, "Connexion impossible", document.getElementById("loginSubmitBtn"));
 
-  if (!getToken()) {
-    if (!password || password !== confirmPassword) {
-      throw new Error("Les mots de passe sont vides ou ne correspondent pas.");
+window.handleRegister = () => {
+  if (registerInFlight) return null;
+  return runAction(async () => {
+    if (registerInFlight) return;
+    registerInFlight = true;
+    try {
+      const firstname = document.getElementById("registerFirstname").value.trim();
+      const lastname = document.getElementById("registerLastname").value.trim();
+      const shopNameInput = document.getElementById("registerShopName");
+      const shopName = (shopNameInput?.value || `${firstname} ${lastname}`).trim();
+      const email = document.getElementById("registerEmail").value.trim();
+      const phone = document.getElementById("registerPhone").value.trim();
+      const password = document.getElementById("registerPassword").value;
+      const confirmPassword = document.getElementById("registerConfirm").value;
+      const category = document.getElementById("registerCategory").value;
+      const openingFor = document.getElementById("registerOpeningFor")?.value || "myself";
+      const agentCode = document.getElementById("registerAgentCode")?.value?.trim() || "";
+      const idFile = document.getElementById("registerIdCard").files[0];
+      const termsAccepted = document.querySelector("#form-register .form-options input[type=checkbox]")?.checked;
+
+      if (!firstname || !lastname || !shopName || !email || !phone || !category) {
+        throw new Error("Veuillez remplir tous les champs obligatoires.");
+      }
+      if (!password || password !== confirmPassword) {
+        throw new Error("Les mots de passe sont vides ou ne correspondent pas.");
+      }
+      if (!idFile) throw new Error("Veuillez charger votre pièce d'identité.");
+      if (!termsAccepted) throw new Error("Vous devez accepter les conditions d'utilisation.");
+      if (typeof window.isPasswordValid === "function" && !window.isPasswordValid(password)) {
+        throw new Error("Le mot de passe doit contenir 8 caractères, une majuscule et un caractère spécial.");
+      }
+
+      await ensureRegisteredUser({ email, password, firstname, lastname, phone });
+
+      const existingAccount = await backend("getMyAccount");
+      if (existingAccount?.shop) {
+        await refreshCurrentData();
+        ui.showPage("dashboard");
+        toast("info", "Compte déjà actif", "Votre boutique est déjà enregistrée.");
+        return;
+      }
+
+      const idCardPath = await uploadPrivateIdentity(idFile);
+      await backend("completeMerchantProfile", {
+        firstname,
+        lastname,
+        phone,
+        shop: {
+          name: shopName,
+          category,
+          description: "Nouvelle boutique sur Seneko Market. En attente de validation.",
+          phone,
+          email,
+          whatsapp: phone.replace(/\D/g, ""),
+          logo: shopName.charAt(0).toUpperCase(),
+          icon: "fa-store",
+          idCardPath,
+          openingFor,
+          agentCode: agentCode || undefined
+        }
+      });
+
+      await refreshCurrentData();
+      ui.showPage("dashboard");
+      toast(
+        "success",
+        "✅ Inscription réussie",
+        "Votre boutique a été enregistrée et attend maintenant la validation de l'administrateur."
+      );
+    } finally {
+      registerInFlight = false;
     }
-    const registered = await apiFetch("/auth/register", {
-      body: { email, password, firstname, lastname, phone }
-    });
-    saveToken(registered.token, true);
-  }
-
-  const idCardPath = await uploadPrivateIdentity(idFile);
-  await backend("completeMerchantProfile", {
-    firstname,
-    lastname,
-    phone,
-    shop: {
-      name: shopName,
-      category,
-      description: "Nouvelle boutique sur Seneko Market. En attente de validation.",
-      phone,
-      email,
-      whatsapp: phone.replace(/\D/g, ""),
-      logo: shopName.charAt(0).toUpperCase(),
-      icon: "fa-store",
-      idCardPath,
-      openingFor,
-      agentCode: agentCode || undefined
-    }
-  });
-
-  await refreshCurrentData();
-  ui.showPage("dashboard");
-  toast(
-    "success",
-    "✅ Inscription réussie",
-    "Votre boutique a été enregistrée et attend maintenant la validation de l'administrateur."
-  );
-}, "Inscription impossible");
+  }, "Inscription impossible", document.getElementById("registerSubmitBtn"));
+};
 
 window.handleLogout = () => runAction(async () => {
   clearToken();
