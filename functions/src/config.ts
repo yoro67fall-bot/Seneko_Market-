@@ -135,3 +135,9 @@ export function getAdminPassword(): string {
 export function getCronSecret(): string {
   return env("CRON_SECRET");
 }
+
+/** Amounts below this use instant server-side fulfillment (providers often require >= 1000 XOF). */
+export function getPaymentProviderMinAmount(): number {
+  const raw = Number(env("PAYMENT_PROVIDER_MIN_AMOUNT", "1000"));
+  return Number.isInteger(raw) && raw > 0 ? raw : 1000;
+}

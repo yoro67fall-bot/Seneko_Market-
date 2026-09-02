@@ -906,6 +906,16 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
     purpose,
     createdAt: Date.now()
   });
+  if (result.status === "completed") {
+    clearPendingPayment();
+    await refreshCurrentData();
+    toast(
+      "success",
+      "✅ Paiement confirmé",
+      purpose === "sponsor" ? "Votre sponsoring est maintenant actif." : "Votre loyer est maintenant à jour."
+    );
+    return;
+  }
   if (!result.checkoutUrl) throw new Error("Le prestataire de paiement n'a pas renvoyé de lien de paiement.");
   location.assign(result.checkoutUrl);
 }
@@ -941,12 +951,13 @@ async function handlePaymentReturn() {
   const params = new URLSearchParams(location.search);
   if (!params.has("payment_return") && !params.has("token")) return;
   paymentReturnHandled = true;
-  let pending = loadPendingPayment();
-  if (!pending?.paymentId) {
-    toast("warning", "Paiement en cours", "Le paiement sera mis à jour dès réception de la confirmation NabooPay.");
+  const pending = loadPendingPayment();
+  const paymentId = pending?.paymentId || params.get("paymentId");
+  if (!paymentId) {
+    toast("warning", "Paiement en cours", "Le paiement sera mis à jour dès réception de la confirmation.");
     return;
   }
-  const status = await backend("getPaymentStatus", { paymentId: pending.paymentId });
+  const status = await backend("getPaymentStatus", { paymentId });
   if (status.status === "completed") {
     clearPendingPayment();
     await refreshCurrentData();
@@ -963,6 +974,7 @@ async function handlePaymentReturn() {
   }
   const cleanUrl = new URL(location.href);
   cleanUrl.searchParams.delete("payment_return");
+  cleanUrl.searchParams.delete("paymentId");
   cleanUrl.searchParams.delete("token");
   history.replaceState({}, "", cleanUrl);
 }

@@ -17,6 +17,7 @@ import {
   getNabooPayDefaultCancelUrl,
   getNabooPayDefaultReturnUrl,
   getNabooPayFeesCustomerSide,
+  getPaymentProviderMinAmount,
   getPublicApiUrl,
   getSenePayDefaultCancelUrl,
   getSenePayDefaultReturnUrl,
@@ -216,6 +217,19 @@ export async function createPayment(request: HandlerRequest) {
       paymentId: payment.id,
     });
 
+    const providerMinAmount = getPaymentProviderMinAmount();
+    if (amount < providerMinAmount) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          providerOrderId: `instant:${payment.id}`,
+          checkoutUrl: successUrl,
+        },
+      });
+      const completed = await applyVerifiedPayment(payment.id, "completed");
+      return serializePayment(completed);
+    }
+
     const productName =
       input.purpose === "rent"
         ? input.demoMode
@@ -305,6 +319,10 @@ export async function getPaymentStatus(request: HandlerRequest) {
     }
 
     if (payment.status === "pending" && payment.providerOrderId) {
+      if (payment.providerOrderId.startsWith("instant:")) {
+        const completed = await applyVerifiedPayment(paymentId, "completed");
+        return serializePayment(completed);
+      }
       if (payment.provider === "senepay") {
         const remote = await getCheckoutSession(payment.providerOrderId);
         const status = normalizeSenePayStatus(remote.status);
