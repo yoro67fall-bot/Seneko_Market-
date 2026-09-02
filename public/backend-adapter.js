@@ -1435,7 +1435,7 @@ window.loadIdentityPreviews = async () => {
 
 window.saveRentConfig = () => runAction(async () => {
   const rentAmount = Number(document.getElementById("rentAmountInput").value);
-  if (!Number.isInteger(rentAmount) || rentAmount < 1000) throw new Error("Le loyer minimum est de 1 000 F.");
+  if (!Number.isInteger(rentAmount) || rentAmount < 1) throw new Error("Le loyer doit être un montant positif.");
   await backend("adminSetRentConfig", { rentAmount });
   await refreshCurrentData();
   toast("success", "✅ Loyer configuré", `Le loyer mensuel est maintenant de ${rentAmount.toLocaleString("fr-FR")} F.`);

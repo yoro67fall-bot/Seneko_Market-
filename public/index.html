@@ -5994,7 +5994,7 @@
                 <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Définissez le montant du loyer mensuel pour les boutiques.</p>
                 <div class="rent-config-row">
                     <label>Loyer mensuel (F CFA) :</label>
-                    <input type="number" id="rentAmountInput" value="5000" min="1000" step="500">
+                    <input type="number" id="rentAmountInput" value="5000" min="1" step="1">
                     <button class="btn btn-primary" onclick="saveRentConfig()">
                         <i class="fas fa-save"></i> Enregistrer
                     </button>
@@ -7883,8 +7883,8 @@ SCRIPT COMPLET
 
         function saveRentConfig() {
             const amount = parseInt(document.getElementById('rentAmountInput').value);
-            if (isNaN(amount) || amount < 1000) {
-                showToast('error', '⚠️ Erreur', 'Veuillez entrer un montant valide (minimum 1 000 F).');
+            if (isNaN(amount) || amount < 1) {
+                showToast('error', '⚠️ Erreur', 'Veuillez entrer un montant valide (supérieur à 0 F).');
                 return;
             }
             // Mettre à jour le loyer de la plateforme

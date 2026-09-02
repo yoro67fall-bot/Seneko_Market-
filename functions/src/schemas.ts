@@ -281,7 +281,7 @@ export const sponsorPricesSchema = z
 
 export const adminRentConfigSchema = z
   .object({
-    rentAmount: z.number().int().min(100).max(100_000_000),
+    rentAmount: z.number().int().min(1).max(100_000_000),
     rentDurationDays: z.number().int().min(1).max(366).default(30),
     sponsorPrices: sponsorPricesSchema.optional(),
   })
