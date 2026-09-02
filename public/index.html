@@ -8881,8 +8881,39 @@ SCRIPT COMPLET
         }
 
         function updateReminderVisibility() {
-            /* Automatic rent reminders run on the backend from the 10th of each month. */
+            const section = document.getElementById('reminderSection');
+            if (!section) return;
+            section.style.display = (isLoggedIn && currentUser && !isAdmin) ? 'block' : 'none';
         }
+
+        function updateReminderUI() {
+            const statusEl = document.getElementById('reminderStatus');
+            const btnText = document.getElementById('reminderBtnText');
+            if (!statusEl && !btnText) return;
+            if (statusEl) {
+                statusEl.className = remindersEnabled ? 'reminder-status active' : 'reminder-status inactive';
+                statusEl.innerHTML = remindersEnabled
+                    ? '<i class="fas fa-check-circle"></i> Rappels activés'
+                    : '<i class="fas fa-times-circle"></i> Rappels désactivés';
+            }
+            if (btnText) {
+                btnText.textContent = remindersEnabled ? 'Désactiver les rappels' : 'Activer les rappels';
+            }
+        }
+
+        function toggleReminders() {
+            remindersEnabled = !remindersEnabled;
+            updateReminderUI();
+            showToast(
+                'info',
+                'Rappels WhatsApp',
+                remindersEnabled
+                    ? 'Les rappels automatiques sont activés.'
+                    : 'Les rappels automatiques sont désactivés.'
+            );
+        }
+        window.updateReminderUI = updateReminderUI;
+        window.toggleReminders = toggleReminders;
 
         // ================================================================
         // CATÉGORIES - NOUVELLE STRUCTURE
