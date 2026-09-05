@@ -64,14 +64,24 @@ async function providerFetch(
   path: string,
   init: RequestInit,
 ): Promise<JsonRecord> {
+  const apiKey = getSenePayApiKey();
+  const apiSecret = getSenePayApiSecret();
+  if (!apiKey || !apiSecret) {
+    throw new SenePayError(
+      "SenePay n'est pas configuré sur le serveur (clés API manquantes).",
+      503,
+      "missing_credentials",
+    );
+  }
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        "X-Api-Key": getSenePayApiKey(),
-        "X-Api-Secret": getSenePayApiSecret(),
+        "X-Api-Key": apiKey,
+        "X-Api-Secret": apiSecret,
         ...(init.headers ?? {}),
       },
       signal: AbortSignal.timeout(15_000),

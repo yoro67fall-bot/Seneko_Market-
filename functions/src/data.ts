@@ -273,7 +273,8 @@ export function fromConfigRow(row: ConfigRow): PlatformConfig {
       "60days": row.sponsorPrice60,
     },
     sponsorDurations: { ...DEFAULT_PLATFORM_CONFIG.sponsorDurations },
-    currency: (row.currency === "CDF" ? "CDF" : "XOF") as "XOF" | "CDF",
+    // Always derive currency from country so CD never pays with XOF by mistake.
+    currency: COUNTRY_CURRENCY[countryCode] ?? (row.currency === "CDF" ? "CDF" : "XOF"),
     platformLogo: row.platformLogo ? toPublicAssetUrl(row.platformLogo) : row.platformLogo,
     contactPhone: row.contactPhone ?? "",
     contactEmail: row.contactEmail ?? "",

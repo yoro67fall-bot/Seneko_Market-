@@ -286,6 +286,12 @@ function applyCountryPaymentUi(platform) {
       CD: "081 234 5678"
     };
     phoneInput.placeholder = placeholders[String(country).toUpperCase()] || placeholders.SN;
+    phoneInput.title =
+      String(country).toUpperCase() === "CD"
+        ? "Numéro RDC (commence par 08… ou 09…)"
+        : String(country).toUpperCase() === "TG"
+          ? "Numéro Togo à 8 chiffres"
+          : "";
   }
   const first = methods[0]?.id || "orange";
   if (typeof window.selectPaymentMethod === "function") {
@@ -1072,7 +1078,7 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
     toast(
       "info",
       "Confirmez sur votre téléphone",
-      "Validez le paiement T-Money (USSD) sur votre mobile. Nous vérifions le statut…"
+      "Validez le paiement Mobile Money (USSD) sur votre mobile. Nous vérifions le statut…"
     );
     await pollPaymentUntilDone(result.paymentId, purpose);
     return;
@@ -1084,8 +1090,12 @@ window.processPayment = () => runAction(async () => {
   if (!getToken()) throw new Error("Veuillez vous connecter avant de payer.");
   const shop = currentShop();
   if (!shop) throw new Error("Boutique introuvable.");
-  const method = ui.getState().selectedPaymentMethod;
-  if (method !== "visa" && method !== "card") {
+  const state = ui.getState();
+  const method = state.selectedPaymentMethod;
+  const rent = Number(state.rentAmount);
+  const instantLocal =
+    isDemoRentPayment() || (Number.isFinite(rent) && rent > 0 && rent < 1000);
+  if (!instantLocal && method !== "visa" && method !== "card") {
     const phone = document.getElementById("phoneNumber")?.value.trim() || shop.phone || "";
     if (!phone) throw new Error("Veuillez saisir votre numéro de téléphone.");
   }

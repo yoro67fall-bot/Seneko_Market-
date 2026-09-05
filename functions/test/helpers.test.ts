@@ -45,9 +45,14 @@ describe("NabooPay helpers", () => {
   it("formats Benin, Togo and DRC local numbers for SenePay", () => {
     expect(toInternationalPhone("60000001", "BJ")).toBe("+22960000001");
     expect(toInternationalPhone("60000001", "TG")).toBe("+22860000001");
+    expect(toInternationalPhone("90123456", "TG")).toBe("+22890123456");
+    expect(() => toInternationalPhone("785305575", "TG")).toThrow(/Togo/);
     expect(toInternationalPhone("120000011", "CD")).toBe("+243120000011");
     expect(toInternationalPhone("0120000011", "CD")).toBe("+243120000011");
     expect(toInternationalPhone("243120000011", "CD")).toBe("+243120000011");
+    expect(toInternationalPhone("0812345678", "CD")).toBe("+243812345678");
+    expect(toInternationalPhone("0991234567", "CD")).toBe("+243991234567");
+    expect(() => toInternationalPhone("785305575", "CD")).toThrow(/RDC/);
   });
 
   it("verifies HMAC signatures against the raw webhook body", () => {

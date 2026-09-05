@@ -23,7 +23,7 @@ import {
   getSenePayDefaultReturnUrl,
   getSenePayWebhookUrl,
 } from "../config.js";
-import { COUNTRY_PAYMENT_PROVIDER } from "../country.js";
+import { COUNTRY_CURRENCY, COUNTRY_PAYMENT_PROVIDER } from "../country.js";
 import { prisma } from "../prisma.js";
 import {
   assertShopOwner,
@@ -134,6 +134,7 @@ export async function createPayment(request: HandlerRequest) {
         : config.sponsorPrices[input.sponsorOption as SponsorOption];
     const shouldSkipProvider =
       useInstantCheckout || amount < providerMinAmount;
+    const currency = COUNTRY_CURRENCY[countryCode];
     const durationDays =
       input.purpose === "sponsor"
         ? config.sponsorDurations[input.sponsorOption as SponsorOption]
@@ -162,22 +163,37 @@ export async function createPayment(request: HandlerRequest) {
       successUrl = resolveRedirectUrl(input.returnUrl, defaultReturn, origins);
       errorUrl = resolveRedirectUrl(input.cancelUrl, defaultCancel, origins);
     } catch (error) {
-      throw new ApiError(
-        "invalid-argument",
-        error instanceof Error ? error.message : "Invalid redirect URL.",
-      );
+      if (!shouldSkipProvider) {
+        throw new ApiError(
+          "invalid-argument",
+          error instanceof Error ? error.message : "Invalid redirect URL.",
+        );
+      }
+      // Instant checkout does not redirect to a PSP; keep a best-effort return URL.
+      successUrl = input.returnUrl?.trim() || defaultReturn || "https://seneko-market-sengal.netlify.app/?payment_return=success";
+      errorUrl = input.cancelUrl?.trim() || defaultCancel || successUrl;
     }
 
     const phoneSource =
       input.payerPhone || shop.phone || (typeof profile?.phone === "string" ? profile.phone : "");
-    let phone: string;
-    try {
-      phone = toInternationalPhone(String(phoneSource), countryCode);
-    } catch {
-      throw new ApiError(
-        "invalid-argument",
-        `Un numéro de téléphone valide est requis pour ${countryCode}.`,
-      );
+    let phone = "";
+    if (!shouldSkipProvider) {
+      try {
+        phone = toInternationalPhone(String(phoneSource), countryCode);
+      } catch (error) {
+        throw new ApiError(
+          "invalid-argument",
+          error instanceof Error
+            ? error.message
+            : `Un numéro de téléphone valide est requis pour ${countryCode}.`,
+        );
+      }
+    } else if (phoneSource) {
+      try {
+        phone = toInternationalPhone(String(phoneSource), countryCode);
+      } catch {
+        phone = String(phoneSource);
+      }
     }
 
     const payment = await prisma.$transaction(async (tx) => {
@@ -206,7 +222,7 @@ export async function createPayment(request: HandlerRequest) {
           purpose: input.purpose,
           paymentMethod: input.paymentMethod,
           amount,
-          currency: config.currency,
+          currency,
           status: "pending",
           sponsorOption: input.sponsorOption ?? null,
           durationDays,
@@ -260,16 +276,20 @@ export async function createPayment(request: HandlerRequest) {
         const webhookUrl =
           getSenePayWebhookUrl() || `${getPublicApiUrl()}/webhooks/senepay`;
 
-        // Togo: T-Money only via Direct API (USSD push), not hosted Orange/Wave UI.
-        if (countryCode === "TG") {
-          const operator =
-            input.paymentMethod === "tmoney"
-              ? "tmoney"
-              : mapUiMethodToSenePayOperator(input.paymentMethod);
-          if (operator !== "tmoney") {
+        const directOperators: Record<string, string[]> = {
+          TG: ["tmoney"],
+          CD: ["mpesa", "airtel", "orange"],
+          BJ: ["moov", "mtn"],
+        };
+        const allowedOperators = directOperators[countryCode];
+        if (allowedOperators) {
+          const operator = mapUiMethodToSenePayOperator(input.paymentMethod);
+          if (!allowedOperators.includes(operator)) {
             throw new ApiError(
               "invalid-argument",
-              "Sur la plateforme Togo, seul T-Money est accepté.",
+              countryCode === "TG"
+                ? "Sur la plateforme Togo, seul T-Money est accepté."
+                : `Moyen de paiement non supporté pour ${countryCode}.`,
             );
           }
           const customerName = [
@@ -280,9 +300,9 @@ export async function createPayment(request: HandlerRequest) {
             .trim();
           const direct = await initiateDirectPayment({
             amount,
-            currency: config.currency,
+            currency,
             country: countryCode,
-            operator: "tmoney",
+            operator,
             customerPhone: phone,
             orderId: payment.id,
             customerName: customerName || "Commercant Seneko",
@@ -316,7 +336,7 @@ export async function createPayment(request: HandlerRequest) {
 
         const checkout = await createCheckoutSession({
           amount,
-          currency: config.currency,
+          currency,
           country: countryCode,
           orderReference: payment.id,
           description: productName,

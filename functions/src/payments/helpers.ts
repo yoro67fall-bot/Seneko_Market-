@@ -125,10 +125,22 @@ export function toInternationalPhone(
   const patterns: Record<PlatformCountry, RegExp> = {
     SN: /^\+2217\d{8}$/,
     BJ: /^\+229\d{8,10}$/,
-    TG: /^\+228\d{8,10}$/,
-    CD: /^\+243\d{8,10}$/,
+    // Togo mobiles are 8 digits (sandbox 60000001). Reject SN-style 9-digit numbers.
+    TG: /^\+228\d{8}$/,
+    // CD: production mobiles start with 8/9; SenePay sandbox uses 12xxxxxxx.
+    CD: /^\+243[189]\d{7,9}$/,
   };
   if (!patterns[countryCode].test(international)) {
+    if (countryCode === "CD") {
+      throw new Error(
+        "Utilisez un numéro RDC valide (ex. 081 234 5678 ou 099…), pas un numéro sénégalais.",
+      );
+    }
+    if (countryCode === "TG") {
+      throw new Error(
+        "Utilisez un numéro Togo à 8 chiffres (ex. 90 12 34 56), pas un numéro sénégalais.",
+      );
+    }
     throw new Error(`A valid ${countryCode} mobile number is required.`);
   }
   return international;
