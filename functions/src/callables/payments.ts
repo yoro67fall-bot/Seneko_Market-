@@ -110,16 +110,23 @@ export async function createPayment(request: HandlerRequest) {
       throw new ApiError("not-found", "Shop not found.");
     }
     const profile = serializeProfile(user);
+    const providerMinAmount = getPaymentProviderMinAmount();
     const demoRentAmount = (() => {
       const raw = Number(env("DEMO_RENT_AMOUNT", "10"));
-      return Number.isInteger(raw) && raw >= 10 ? raw : 10;
+      return Number.isInteger(raw) && raw >= 1 ? raw : 10;
     })();
+    // Demo mode and rents below the provider minimum must never call NabooPay/SenePay.
+    const useInstantCheckout =
+      Boolean(input.demoMode) ||
+      (input.purpose === "rent" && config.rentAmount < providerMinAmount);
     const amount =
       input.purpose === "rent"
         ? input.demoMode
           ? demoRentAmount
           : config.rentAmount
         : config.sponsorPrices[input.sponsorOption as SponsorOption];
+    const shouldSkipProvider =
+      useInstantCheckout || amount < providerMinAmount;
     const durationDays =
       input.purpose === "sponsor"
         ? config.sponsorDurations[input.sponsorOption as SponsorOption]
@@ -217,8 +224,7 @@ export async function createPayment(request: HandlerRequest) {
       paymentId: payment.id,
     });
 
-    const providerMinAmount = getPaymentProviderMinAmount();
-    if (amount < providerMinAmount) {
+    async function completeInstantPayment() {
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
@@ -230,6 +236,10 @@ export async function createPayment(request: HandlerRequest) {
       return serializePayment(completed);
     }
 
+    if (shouldSkipProvider) {
+      return completeInstantPayment();
+    }
+
     const productName =
       input.purpose === "rent"
         ? input.demoMode
@@ -238,65 +248,77 @@ export async function createPayment(request: HandlerRequest) {
         : `Sponsoring Seneko Market (${input.sponsorOption})`;
     const productDescription = `${input.purpose}:${payment.id}:${input.shopId}${input.demoMode ? ":demo" : ""}`;
 
-    if (provider === "senepay") {
-      const webhookUrl =
-        getSenePayWebhookUrl() || `${getPublicApiUrl()}/webhooks/senepay`;
-      const checkout = await createCheckoutSession({
+    try {
+      if (provider === "senepay") {
+        const webhookUrl =
+          getSenePayWebhookUrl() || `${getPublicApiUrl()}/webhooks/senepay`;
+        const checkout = await createCheckoutSession({
+          amount,
+          currency: config.currency,
+          country: countryCode,
+          orderReference: payment.id,
+          description: productName,
+          returnUrl: successUrl,
+          cancelUrl: errorUrl,
+          webhookUrl,
+          metadata: {
+            paymentId: payment.id,
+            shopId: input.shopId,
+            purpose: input.purpose,
+            phone,
+          },
+        });
+        const updated = await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            providerOrderId: checkout.sessionToken,
+            checkoutUrl: checkout.checkoutUrl,
+          },
+        });
+        return serializePayment(updated);
+      }
+
+      const checkout = await createTransaction({
+        methodOfPayment:
+          input.paymentMethod === "card"
+            ? ["wave", "orange_money", "bank"]
+            : ["wave", "orange_money"],
+        productName,
+        productDescription,
         amount,
-        currency: config.currency,
-        country: countryCode,
-        orderReference: payment.id,
-        description: productName,
-        returnUrl: successUrl,
-        cancelUrl: errorUrl,
-        webhookUrl,
-        metadata: {
-          paymentId: payment.id,
-          shopId: input.shopId,
-          purpose: input.purpose,
-          phone,
-        },
+        firstName:
+          typeof profile?.firstname === "string" && profile.firstname
+            ? profile.firstname
+            : "Commercant",
+        lastName:
+          typeof profile?.lastname === "string" && profile.lastname
+            ? profile.lastname
+            : "Seneko",
+        phone,
+        successUrl,
+        errorUrl,
+        feesCustomerSide: getNabooPayFeesCustomerSide(),
       });
+
       const updated = await prisma.payment.update({
         where: { id: payment.id },
         data: {
-          providerOrderId: checkout.sessionToken,
+          providerOrderId: checkout.orderId,
           checkoutUrl: checkout.checkoutUrl,
         },
       });
       return serializePayment(updated);
+    } catch (providerError) {
+      // Provider APIs often reject small amounts; fall back to instant fulfillment.
+      if (amount < providerMinAmount || input.demoMode) {
+        console.warn(
+          "payment-provider: falling back to instant checkout",
+          { amount, providerMinAmount, demoMode: input.demoMode, providerError },
+        );
+        return completeInstantPayment();
+      }
+      throw providerError;
     }
-
-    const checkout = await createTransaction({
-      methodOfPayment:
-        input.paymentMethod === "card"
-          ? ["wave", "orange_money", "bank"]
-          : ["wave", "orange_money"],
-      productName,
-      productDescription,
-      amount,
-      firstName:
-        typeof profile?.firstname === "string" && profile.firstname
-          ? profile.firstname
-          : "Commercant",
-      lastName:
-        typeof profile?.lastname === "string" && profile.lastname
-          ? profile.lastname
-          : "Seneko",
-      phone,
-      successUrl,
-      errorUrl,
-      feesCustomerSide: getNabooPayFeesCustomerSide(),
-    });
-
-    const updated = await prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        providerOrderId: checkout.orderId,
-        checkoutUrl: checkout.checkoutUrl,
-      },
-    });
-    return serializePayment(updated);
   } catch (error) {
     throw fromUnknown(error);
   }

@@ -847,12 +847,22 @@ function paymentUrls() {
   return { returnUrl: success.toString(), cancelUrl: cancel.toString() };
 }
 
+function isDemoRentPayment() {
+  const state = ui.getState();
+  if (state?.isDemoMode === true) return true;
+  if (typeof ui.isDemoMode === "function" && ui.isDemoMode() === true) return true;
+  if (document.body.classList.contains("demo-mode")) return true;
+  const rent = Number(state?.rentAmount);
+  return Number.isFinite(rent) && rent > 0 && rent < 1000;
+}
+
 async function startCheckout({ purpose, sponsorOption, bannerImages }) {
   const shop = currentShop();
   if (!shop) throw new Error("Boutique introuvable.");
   const selected = ui.getState().selectedPaymentMethod;
   const paymentMethod = selected === "visa" ? "card" : selected;
   const idempotencyKey = crypto.randomUUID();
+  const demoMode = purpose === "rent" && isDemoRentPayment();
   const payload = {
     shopId: shop.backendId,
     purpose,
@@ -863,7 +873,7 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
       ? undefined
       : document.getElementById("phoneNumber").value.trim() || undefined,
     idempotencyKey,
-    demoMode: purpose === "rent" && ui.getState().isDemoMode === true,
+    demoMode,
     ...paymentUrls()
   };
   const auth = getToken();
