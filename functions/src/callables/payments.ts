@@ -63,10 +63,21 @@ function fromUnknown(error: unknown): ApiError {
         "Too many payment attempts. Please retry shortly.",
       );
     }
-    const detail =
-      error instanceof SenePayError && error.code
-        ? `${error.message} (${error.code})`
-        : error.message;
+    const seneCode = error instanceof SenePayError ? error.code : null;
+    const detail = seneCode
+      ? `${error.message} (${seneCode})`
+      : error.message;
+    // Client-facing validation / operator refusals should not look like outages.
+    if (
+      error.status === 400 ||
+      seneCode === "payment_failed" ||
+      seneCode === "missing_credentials"
+    ) {
+      return new ApiError(
+        seneCode === "missing_credentials" ? "failed-precondition" : "invalid-argument",
+        detail || "Payment provider rejected the request.",
+      );
+    }
     return new ApiError("unavailable", detail || "Payment provider unavailable.");
   }
   return asApiError(error);

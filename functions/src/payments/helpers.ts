@@ -111,6 +111,13 @@ export function toInternationalPhone(
     normalized = `${dial}${normalized}`;
   } else if (normalized.length === 9) {
     normalized = `${dial}${normalized}`;
+  } else if (
+    countryCode === "BJ" &&
+    normalized.length === 10 &&
+    normalized.startsWith("01")
+  ) {
+    // New Benin mobiles keep the leading 01 (10 digits total).
+    normalized = `${dial}${normalized}`;
   } else if (normalized.length === 10 && normalized.startsWith("0")) {
     normalized = `${dial}${normalized.slice(1)}`;
   } else if (
@@ -124,7 +131,8 @@ export function toInternationalPhone(
   const international = `+${normalized}`;
   const patterns: Record<PlatformCountry, RegExp> = {
     SN: /^\+2217\d{8}$/,
-    BJ: /^\+229\d{8,10}$/,
+    // Benin: 8-digit local (sandbox 60000001) or new 01 + 8 digits. Reject SN-style 9-digit 78….
+    BJ: /^\+229(?:01\d{8}|\d{8})$/,
     // Togo mobiles are 8 digits (sandbox 60000001). Reject SN-style 9-digit numbers.
     TG: /^\+228\d{8}$/,
     // CD: production mobiles start with 8/9; SenePay sandbox uses 12xxxxxxx.
@@ -139,6 +147,11 @@ export function toInternationalPhone(
     if (countryCode === "TG") {
       throw new Error(
         "Utilisez un numéro Togo à 8 chiffres (ex. 90 12 34 56), pas un numéro sénégalais.",
+      );
+    }
+    if (countryCode === "BJ") {
+      throw new Error(
+        "Utilisez un numéro Bénin valide (ex. 01 23 45 67 ou 60000001), pas un numéro sénégalais.",
       );
     }
     throw new Error(`A valid ${countryCode} mobile number is required.`);

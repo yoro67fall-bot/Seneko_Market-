@@ -206,9 +206,21 @@ export async function initiateDirectPayment(
         ? result.redirect_url
         : null;
 
+  const status =
+    typeof result.status === "string" ? result.status : "Processing";
+  if (/^failed$/i.test(status)) {
+    const reason =
+      typeof result.failedReason === "string"
+        ? result.failedReason
+        : typeof result.errorCode === "string"
+          ? result.errorCode
+          : "Paiement refusé par l'opérateur.";
+    throw new SenePayError(reason, 400, "payment_failed");
+  }
+
   return {
     token,
-    status: typeof result.status === "string" ? result.status : "Processing",
+    status,
     nextAction,
     redirectUrl,
     amount: typeof result.amount === "number" ? result.amount : input.amount,

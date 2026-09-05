@@ -29,6 +29,19 @@ function errorMessage(error) {
     unavailable: "Le service est momentanément indisponible. Veuillez réessayer.",
     "deadline-exceeded": "Le service de paiement met trop de temps à répondre. Veuillez réessayer."
   };
+  if (code === "unavailable") {
+    const genericEn = /payment provider unavailable|unavailable\.?$/i;
+    if (raw && !genericEn.test(raw) && raw !== known.unavailable) {
+      return raw;
+    }
+    return known.unavailable;
+  }
+  if (code === "failed-precondition") {
+    if (raw && raw !== known["failed-precondition"] && !/not yet available/i.test(raw)) {
+      return raw;
+    }
+    return known["failed-precondition"];
+  }
   if (known[code] && code !== "invalid-argument") return known[code];
   if (/too large|file size|LIMIT_FILE_SIZE/i.test(raw)) {
     return "L'image est trop lourde. Essayez une photo plus légère (moins de 12 Mo).";
@@ -286,12 +299,12 @@ function applyCountryPaymentUi(platform) {
       CD: "081 234 5678"
     };
     phoneInput.placeholder = placeholders[String(country).toUpperCase()] || placeholders.SN;
-    phoneInput.title =
-      String(country).toUpperCase() === "CD"
-        ? "Numéro RDC (commence par 08… ou 09…)"
-        : String(country).toUpperCase() === "TG"
-          ? "Numéro Togo à 8 chiffres"
-          : "";
+    const titles = {
+      CD: "Numéro RDC (commence par 08… ou 09…)",
+      TG: "Numéro Togo à 8 chiffres",
+      BJ: "Numéro Bénin (8 chiffres ou 01…)"
+    };
+    phoneInput.title = titles[String(country).toUpperCase()] || "";
   }
   const first = methods[0]?.id || "orange";
   if (typeof window.selectPaymentMethod === "function") {
