@@ -133,10 +133,10 @@ export async function createPayment(request: HandlerRequest) {
       const raw = Number(env("DEMO_RENT_AMOUNT", "10"));
       return Number.isInteger(raw) && raw >= 1 ? raw : 10;
     })();
-    // Demo mode and rents below the provider minimum must never call NabooPay/SenePay.
+    // Demo, free rent (0), and amounts at/under the provider minimum never call NabooPay/SenePay.
     const useInstantCheckout =
       Boolean(input.demoMode) ||
-      (input.purpose === "rent" && config.rentAmount < providerMinAmount);
+      (input.purpose === "rent" && config.rentAmount <= providerMinAmount);
     const amount =
       input.purpose === "rent"
         ? input.demoMode
@@ -144,7 +144,7 @@ export async function createPayment(request: HandlerRequest) {
           : config.rentAmount
         : config.sponsorPrices[input.sponsorOption as SponsorOption];
     const shouldSkipProvider =
-      useInstantCheckout || amount < providerMinAmount;
+      useInstantCheckout || amount <= 0 || amount <= providerMinAmount;
     const currency = COUNTRY_CURRENCY[countryCode];
     const durationDays =
       input.purpose === "sponsor"
@@ -267,55 +267,12 @@ export async function createPayment(request: HandlerRequest) {
         },
       });
       const completed = await applyVerifiedPayment(payment.id, "completed");
-      // #region agent log
-      console.info(
-        "[debug-2db4a8] instant-checkout",
-        JSON.stringify({
-          hypothesisId: "B",
-          paymentId: payment.id,
-          amount,
-          shouldSkipProvider,
-          useInstantCheckout,
-          demoMode: Boolean(input.demoMode),
-          configRent: config.rentAmount,
-          providerMinAmount,
-          countryCode,
-        }),
-      );
-      // #endregion
-      return serializePayment(completed, {
-        debug: {
-          shouldSkipProvider,
-          useInstantCheckout,
-          amount,
-          demoMode: Boolean(input.demoMode),
-          configRent: config.rentAmount,
-          providerMinAmount,
-          path: "instant",
-        },
-      });
+      return serializePayment(completed);
     }
 
     if (shouldSkipProvider) {
       return completeInstantPayment();
     }
-
-    // #region agent log
-    console.info(
-      "[debug-2db4a8] provider-checkout",
-      JSON.stringify({
-        hypothesisId: "A",
-        amount,
-        shouldSkipProvider,
-        useInstantCheckout,
-        demoMode: Boolean(input.demoMode),
-        configRent: config.rentAmount,
-        providerMinAmount,
-        countryCode,
-        paymentMethod: input.paymentMethod,
-      }),
-    );
-    // #endregion
 
     const productName =
       input.purpose === "rent"
@@ -382,18 +339,9 @@ export async function createPayment(request: HandlerRequest) {
               : String(direct.nextAction || "").toUpperCase().includes("REDIRECT")
                 ? "redirect"
                 : "ussd_push";
-        return serializePayment(updated, {
+          return serializePayment(updated, {
             nextAction,
             providerStatus: direct.status,
-            debug: {
-              shouldSkipProvider,
-              useInstantCheckout,
-              amount,
-              demoMode: Boolean(input.demoMode),
-              configRent: config.rentAmount,
-              providerMinAmount,
-              path: "direct",
-            },
           });
         }
 
@@ -459,7 +407,7 @@ export async function createPayment(request: HandlerRequest) {
       return serializePayment(updated);
     } catch (providerError) {
       // Provider APIs often reject small amounts; fall back to instant fulfillment.
-      if (amount < providerMinAmount || input.demoMode) {
+      if (amount <= providerMinAmount || input.demoMode) {
         console.warn(
           "payment-provider: falling back to instant checkout",
           { amount, providerMinAmount, demoMode: input.demoMode, providerError },

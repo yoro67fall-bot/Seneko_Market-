@@ -36,6 +36,8 @@ One shared Railway backend can serve **four country frontends**. Each Netlify si
 | `SENEPAY_MERCHANT_DOMAIN` | Declared SenePay domain (default `senekomarket.com`) |
 | `SENEPAY_WEBHOOK_URL` | Prefer Railway direct: `https://YOUR-RAILWAY/webhooks/senepay` (or a Netlify proxy URL) |
 
+**SenePay note:** Rents **≤ 1000 F** (and free rent `0`) are fulfilled instantly in app code and never call SenePay. For BJ/TG/CD rents **above 1000 F**, empty `SENEPAY_API_KEY` / `SENEPAY_API_SECRET` will make payment fail with a clear “clés API manquantes” style error.
+
 6. Deploy. Open `/health` — it should return `{ "ok": true }`.
 7. Migrations create `PlatformConfig` rows for `SN`, `BJ`, `TG`, `CD` and add `countryCode` on shops/users/banners.
 

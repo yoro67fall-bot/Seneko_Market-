@@ -5408,6 +5408,7 @@
                         <h3>Payer le loyer</h3>
                     </div>
                     <div class="payment-amount"><span class="sub">Montant</span><span id="paymentRentAmount">5 000</span> <span id="paymentCurrencyLabel">F CFA</span></div>
+                    <p id="paymentInstantNote" style="display:none;margin:0.6rem 0 0;font-size:0.85rem;color:var(--text-gray);text-align:center;"></p>
                     <div class="payment-methods" id="paymentMethods">
                         <!-- Rempli dynamiquement selon le pays (SN / BJ / TG / CD) -->
                     </div>
@@ -6039,12 +6040,15 @@
             <!-- Configuration du loyer -->
             <div class="admin-rent-config">
                 <h3><i class="fas fa-coins" style="color:var(--warning);"></i> Configuration du loyer</h3>
-                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Définissez le montant du loyer mensuel pour les boutiques.</p>
+                <p style="color:var(--text-gray);font-size:0.85rem;margin-bottom:0.8rem;">Définissez le montant du loyer mensuel (0 = gratuit, pas de paiement marchand).</p>
                 <div class="rent-config-row">
                     <label>Loyer mensuel (F CFA) :</label>
-                    <input type="number" id="rentAmountInput" value="5000" min="1" step="1">
+                    <input type="number" id="rentAmountInput" value="5000" min="0" step="1">
                     <button class="btn btn-primary" onclick="saveRentConfig()">
                         <i class="fas fa-save"></i> Enregistrer
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="setFreeRent()" title="Définir le loyer à 0 F">
+                        <i class="fas fa-gift"></i> Loyer gratuit
                     </button>
                 </div>
             </div>
@@ -7972,7 +7976,9 @@ SCRIPT COMPLET
                     }
                 }
             });
-
+            if (typeof window.updatePaymentCheckoutMode === 'function') {
+                window.updatePaymentCheckoutMode();
+            }
             // Mise à jour spécifique
             const dashRent = document.getElementById('dashboardRentAmount');
             const dashRentDisplay = document.getElementById('dashboardRentDisplay');
@@ -10513,7 +10519,7 @@ SCRIPT COMPLET
             'addProduct', 'deleteProduct', 'deleteProductFromDetail',
             'processPayment', 'submitSponsorship', 'approveShop', 'rejectShop',
             'toggleShopVisibility', 'toggleSponsor', 'markRentPaid',
-            'markRentUnpaid', 'verifyId', 'saveRentConfig', 'saveContactConfig', 'addAdBanner',
+            'markRentUnpaid', 'verifyId', 'saveRentConfig', 'setFreeRent', 'saveContactConfig', 'addAdBanner',
             'removeAdBanner', 'addAgent', 'toggleAgent', 'deleteAgent',
             'saveSponsorPricing', 'removeLogo', 'createNewShop',
             'addCategorySponsor', 'toggleCategorySponsor', 'deleteCategorySponsor',

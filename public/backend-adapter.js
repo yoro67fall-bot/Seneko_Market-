@@ -310,7 +310,60 @@ function applyCountryPaymentUi(platform) {
   if (typeof window.selectPaymentMethod === "function") {
     window.selectPaymentMethod(first);
   }
+  updatePaymentCheckoutMode();
 }
+
+/** Free rent (0) or low rent (<=1000): simplify payment UI / skip phone requirement. */
+function updatePaymentCheckoutMode() {
+  const rent = Number(ui.getState()?.rentAmount);
+  const free = Number.isFinite(rent) && rent === 0;
+  const low =
+    isDemoRentPayment() || (Number.isFinite(rent) && rent > 0 && rent <= 1000);
+  const methods = document.getElementById("paymentMethods");
+  const form = document.getElementById("paymentForm");
+  const phoneField = document.getElementById("phoneField");
+  const payBtn = document.querySelector(".btn-pay");
+  const note = document.getElementById("paymentInstantNote");
+  if (methods) methods.style.display = free ? "none" : "";
+  if (form) {
+    const cardFields = document.getElementById("cardFields");
+    const operatorField = document.getElementById("operatorField");
+    if (free) {
+      if (phoneField) phoneField.style.display = "none";
+      if (operatorField) operatorField.style.display = "none";
+      if (cardFields) cardFields.style.display = "none";
+    } else if (phoneField) {
+      // Low amounts don't need phone for instant fulfillment.
+      phoneField.style.display = low ? "none" : "block";
+      if (operatorField) operatorField.style.display = "none";
+    }
+  }
+  if (payBtn) {
+    if (free) {
+      payBtn.innerHTML = '<i class="fas fa-gift"></i> Activer gratuitement';
+    } else {
+      const amountEl = document.getElementById("payButtonAmount");
+      const currencyEl = document.getElementById("payButtonCurrency");
+      const amountText = amountEl ? amountEl.textContent : "";
+      const currencyText = currencyEl ? currencyEl.textContent : "F";
+      payBtn.innerHTML = `<i class="fas fa-lock"></i> Payer <span id="payButtonAmount">${amountText}</span> <span id="payButtonCurrency">${currencyText}</span>`;
+    }
+  }
+  if (note) {
+    if (free) {
+      note.style.display = "block";
+      note.textContent = "Loyer gratuit : activation immédiate, sans Mobile Money.";
+    } else if (low) {
+      note.style.display = "block";
+      note.textContent = "Montant ≤ 1000 F : confirmation immédiate sans Mobile Money.";
+    } else {
+      note.style.display = "none";
+      note.textContent = "";
+    }
+  }
+}
+
+window.updatePaymentCheckoutMode = updatePaymentCheckoutMode;
 
 function hideSocialLogin() {
   document.querySelectorAll(".auth-social, .auth-divider").forEach(node => {
@@ -611,6 +664,7 @@ async function loadAccount({ navigate = false } = {}) {
 async function refreshCurrentData() {
   await loadPublicData();
   if (getToken()) await loadAccount();
+  updatePaymentCheckoutMode();
 }
 
 function currentShop() {
@@ -1017,13 +1071,9 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
   const shop = currentShop();
   if (!shop) throw new Error("Boutique introuvable.");
   const selected = ui.getState().selectedPaymentMethod;
-  const paymentMethod = selected === "visa" ? "card" : selected;
+  const paymentMethod = selected === "visa" ? "card" : (selected || "orange");
   const idempotencyKey = crypto.randomUUID();
   const demoMode = purpose === "rent" && isDemoRentPayment();
-  const state = ui.getState();
-  // #region agent log
-  fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'A',location:'backend-adapter.js:startCheckout',message:'checkout start',data:{purpose,paymentMethod,demoMode,isDemoRentPayment:isDemoRentPayment(),rentAmount:state?.rentAmount,platformRentAmount:state?.platformRentAmount,bodyDemo:document.body.classList.contains('demo-mode'),country:services?.country||null,shopId:shop?.backendId||null},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   const payload = {
     shopId: shop.backendId,
     purpose,
@@ -1032,7 +1082,7 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
     paymentMethod,
     payerPhone: paymentMethod === "card"
       ? undefined
-      : document.getElementById("phoneNumber").value.trim() || undefined,
+      : document.getElementById("phoneNumber")?.value.trim() || undefined,
     idempotencyKey,
     demoMode,
     ...paymentUrls()
@@ -1055,9 +1105,6 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
     } catch {
       parsed = {};
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'E',location:'backend-adapter.js:createPaymentViaFunction',message:'create-payment response',data:{httpStatus:response.status,ok:response.ok,hasResult:Boolean(parsed?.result),errorStatus:parsed?.error?.status||null,errorMessage:parsed?.error?.message||parsed?.error||null,resultStatus:parsed?.result?.status||parsed?.status||null,resultAmount:parsed?.result?.amount??parsed?.amount??null,debug:parsed?.result?.debug||parsed?.debug||null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!response.ok) {
       const error = new Error(parsed?.error?.message || parsed?.error || "La requête de paiement a échoué.");
       error.code = parsed?.error?.status || `http-${response.status}`;
@@ -1069,18 +1116,12 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
   try {
     result = await createPaymentViaFunction();
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'E',location:'backend-adapter.js:startCheckout:catch',message:'createPayment threw',data:{code:error?.code||null,message:String(error?.message||error),is404:String(error?.code||'').startsWith('http-404')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!String(error?.code || "").startsWith("http-404")) {
       throw error;
     }
     // Local and legacy fallback: call Railway callable directly.
     result = await backend("createPayment", payload);
   }
-  // #region agent log
-  fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'C',location:'backend-adapter.js:startCheckout:result',message:'payment result branch',data:{status:result?.status||null,amount:result?.amount??null,hasCheckoutUrl:Boolean(result?.checkoutUrl),nextAction:result?.nextAction||null,providerOrderIdPrefix:String(result?.providerOrderId||'').slice(0,20),debug:result?.debug||null},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   savePendingPayment({
     paymentId: result.paymentId,
     purpose,
@@ -1092,7 +1133,11 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
     toast(
       "success",
       "✅ Paiement confirmé",
-      purpose === "sponsor" ? "Votre sponsoring est maintenant actif." : "Votre loyer est maintenant à jour."
+      purpose === "sponsor"
+        ? "Votre sponsoring est maintenant actif."
+        : Number(ui.getState().rentAmount) === 0
+          ? "Loyer gratuit activé. Votre boutique est à jour."
+          : "Votre loyer est maintenant à jour."
     );
     return;
   }
@@ -1120,10 +1165,8 @@ window.processPayment = () => runAction(async () => {
   const method = state.selectedPaymentMethod;
   const rent = Number(state.rentAmount);
   const instantLocal =
-    isDemoRentPayment() || (Number.isFinite(rent) && rent > 0 && rent < 1000);
-  // #region agent log
-  fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'D',location:'backend-adapter.js:processPayment',message:'processPayment gate',data:{method,rent,instantLocal,demo:isDemoRentPayment(),phoneLen:(document.getElementById('phoneNumber')?.value||'').trim().length},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
+    isDemoRentPayment() ||
+    (Number.isFinite(rent) && rent >= 0 && rent <= 1000);
   if (!instantLocal && method !== "visa" && method !== "card") {
     const phone = document.getElementById("phoneNumber")?.value.trim() || shop.phone || "";
     if (!phone) throw new Error("Veuillez saisir votre numéro de téléphone.");
@@ -1646,11 +1689,25 @@ window.loadIdentityPreviews = async () => {
 
 window.saveRentConfig = () => runAction(async () => {
   const rentAmount = Number(document.getElementById("rentAmountInput").value);
-  if (!Number.isInteger(rentAmount) || rentAmount < 1) throw new Error("Le loyer doit être un montant positif.");
+  if (!Number.isInteger(rentAmount) || rentAmount < 0) {
+    throw new Error("Le loyer doit être un montant entier ≥ 0 (0 = gratuit).");
+  }
   await backend("adminSetRentConfig", { rentAmount });
   await refreshCurrentData();
-  toast("success", "✅ Loyer configuré", `Le loyer mensuel est maintenant de ${rentAmount.toLocaleString("fr-FR")} F.`);
+  toast(
+    "success",
+    "✅ Loyer configuré",
+    rentAmount === 0
+      ? "Loyer gratuit : les commerçants peuvent activer sans paiement."
+      : `Le loyer mensuel est maintenant de ${rentAmount.toLocaleString("fr-FR")} F.`
+  );
 }, "Configuration impossible");
+
+window.setFreeRent = () => {
+  const input = document.getElementById("rentAmountInput");
+  if (input) input.value = "0";
+  return window.saveRentConfig();
+};
 
 window.changeAdminPassword = () => runAction(async () => {
   const currentPassword = String(document.getElementById("adminCurrentPasswordInput")?.value || "");
