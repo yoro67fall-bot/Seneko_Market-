@@ -31,8 +31,9 @@ One shared Railway backend can serve **four country frontends**. Each Netlify si
 | `SENEPAY_API_KEY` | From SenePay (`X-Api-Key`) |
 | `SENEPAY_API_SECRET` | From SenePay (`X-Api-Secret`) |
 | `SENEPAY_WEBHOOK_SECRET` | `whsec_…` from SenePay |
-| `SENEPAY_DEFAULT_RETURN_URL` | Optional fallback return URL |
-| `SENEPAY_DEFAULT_CANCEL_URL` | Optional fallback cancel URL |
+| `SENEPAY_DEFAULT_RETURN_URL` | Optional; must be on `senekomarket.com` (Netlify URLs are omitted) |
+| `SENEPAY_DEFAULT_CANCEL_URL` | Optional; must be on `senekomarket.com` |
+| `SENEPAY_MERCHANT_DOMAIN` | Declared SenePay domain (default `senekomarket.com`) |
 | `SENEPAY_WEBHOOK_URL` | Prefer Railway direct: `https://YOUR-RAILWAY/webhooks/senepay` (or a Netlify proxy URL) |
 
 6. Deploy. Open `/health` — it should return `{ "ok": true }`.

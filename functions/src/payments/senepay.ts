@@ -1,6 +1,9 @@
 import {
   getSenePayApiKey,
   getSenePayApiSecret,
+  getSenePayDefaultCancelUrl,
+  getSenePayDefaultReturnUrl,
+  getSenePayMerchantDomain,
 } from "../config.js";
 import { isRecord, type JsonRecord } from "./helpers.js";
 
@@ -23,8 +26,8 @@ export interface CreateCheckoutSessionInput {
   country: string;
   orderReference: string;
   description: string;
-  returnUrl: string;
-  cancelUrl: string;
+  returnUrl?: string;
+  cancelUrl?: string;
   webhookUrl?: string;
   metadata?: Record<string, string>;
 }
@@ -58,6 +61,42 @@ export interface DirectPaymentResult {
   redirectUrl: string | null;
   amount: number;
   raw: JsonRecord;
+}
+
+/**
+ * SenePay only accepts return/cancel URLs on the merchant's declared domain
+ * (default senekomarket.com). Netlify country sites must be omitted for Direct USSD.
+ */
+export function sanitizeSenePayRedirectUrl(
+  url: string | undefined,
+): string | undefined {
+  const trimmed = url?.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return undefined;
+    }
+    const host = parsed.hostname.toLowerCase();
+    const merchant = getSenePayMerchantDomain().toLowerCase();
+    if (host === merchant || host.endsWith(`.${merchant}`)) {
+      return parsed.toString();
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveSenePayRedirect(
+  preferred: string | undefined,
+  fallback: string,
+): string | undefined {
+  return (
+    sanitizeSenePayRedirectUrl(preferred) ||
+    sanitizeSenePayRedirectUrl(fallback) ||
+    undefined
+  );
 }
 
 async function providerFetch(
@@ -121,6 +160,14 @@ async function providerFetch(
 export async function createCheckoutSession(
   input: CreateCheckoutSessionInput,
 ): Promise<CheckoutSessionResult> {
+  const returnUrl = resolveSenePayRedirect(
+    input.returnUrl,
+    getSenePayDefaultReturnUrl(),
+  );
+  const cancelUrl = resolveSenePayRedirect(
+    input.cancelUrl,
+    getSenePayDefaultCancelUrl(),
+  );
   const result = await providerFetch("/api/v1/checkout/sessions", {
     method: "POST",
     body: JSON.stringify({
@@ -129,8 +176,8 @@ export async function createCheckoutSession(
       country: input.country,
       orderReference: input.orderReference,
       description: input.description,
-      returnUrl: input.returnUrl,
-      cancelUrl: input.cancelUrl,
+      ...(returnUrl ? { returnUrl } : {}),
+      ...(cancelUrl ? { cancelUrl } : {}),
       ...(input.webhookUrl ? { webhookUrl: input.webhookUrl } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
       expiresInMinutes: 60,
@@ -166,6 +213,9 @@ export async function initiateDirectPayment(
   input: InitiateDirectPaymentInput,
 ): Promise<DirectPaymentResult> {
   const phone = input.customerPhone.replace(/^\+/, "");
+  // Direct USSD (T-Money/MTN/Moov/M-Pesa…) does not need return_url; Netlify URLs are rejected.
+  const returnUrl = sanitizeSenePayRedirectUrl(input.returnUrl);
+  const cancelUrl = sanitizeSenePayRedirectUrl(input.cancelUrl);
   const result = await providerFetch("/api/v1/payments/initiate", {
     method: "POST",
     body: JSON.stringify({
@@ -176,8 +226,8 @@ export async function initiateDirectPayment(
       customer_phone: phone,
       order_id: input.orderId,
       ...(input.customerName ? { customer_name: input.customerName } : {}),
-      ...(input.returnUrl ? { return_url: input.returnUrl } : {}),
-      ...(input.cancelUrl ? { cancel_url: input.cancelUrl } : {}),
+      ...(returnUrl ? { return_url: returnUrl } : {}),
+      ...(cancelUrl ? { cancel_url: cancelUrl } : {}),
       ...(input.webhookUrl ? { webhook_url: input.webhookUrl } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
     }),

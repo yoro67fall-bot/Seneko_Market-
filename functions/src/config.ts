@@ -124,6 +124,16 @@ export function getSenePayWebhookUrl(): string {
   return env("SENEPAY_WEBHOOK_URL");
 }
 
+/** Merchant website domain registered in the SenePay dashboard (return_url must match). */
+export function getSenePayMerchantDomain(): string {
+  const raw = env("SENEPAY_MERCHANT_DOMAIN", "senekomarket.com")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "");
+  return raw || "senekomarket.com";
+}
+
 export function getAdminEmail(): string {
   return env("ADMIN_EMAIL").toLowerCase();
 }

@@ -11,6 +11,7 @@ import {
   toInternationalPhone,
   verifyNabooPaySignature,
 } from "../src/payments/helpers.js";
+import { sanitizeSenePayRedirectUrl } from "../src/payments/senepay.js";
 
 describe("NabooPay helpers", () => {
   it("maps UI payment methods to NabooPay methods", () => {
@@ -45,6 +46,7 @@ describe("NabooPay helpers", () => {
   it("formats Benin, Togo and DRC local numbers for SenePay", () => {
     expect(toInternationalPhone("60000001", "BJ")).toBe("+22960000001");
     expect(toInternationalPhone("0197000001", "BJ")).toBe("+2290197000001");
+    expect(() => toInternationalPhone("01234567", "BJ")).toThrow(/Bénin/);
     expect(() => toInternationalPhone("785305575", "BJ")).toThrow(/Bénin/);
     expect(toInternationalPhone("60000001", "TG")).toBe("+22860000001");
     expect(toInternationalPhone("90123456", "TG")).toBe("+22890123456");
@@ -55,6 +57,28 @@ describe("NabooPay helpers", () => {
     expect(toInternationalPhone("0812345678", "CD")).toBe("+243812345678");
     expect(toInternationalPhone("0991234567", "CD")).toBe("+243991234567");
     expect(() => toInternationalPhone("785305575", "CD")).toThrow(/RDC/);
+  });
+
+  it("only keeps SenePay return URLs on the merchant domain", () => {
+    const previous = process.env.SENEPAY_MERCHANT_DOMAIN;
+    process.env.SENEPAY_MERCHANT_DOMAIN = "senekomarket.com";
+    try {
+      expect(
+        sanitizeSenePayRedirectUrl("https://senekomarket.com/?payment_return=success"),
+      ).toContain("senekomarket.com");
+      expect(
+        sanitizeSenePayRedirectUrl("https://pay.senekomarket.com/done"),
+      ).toContain("pay.senekomarket.com");
+      expect(
+        sanitizeSenePayRedirectUrl(
+          "https://seneko-market-togo.netlify.app/?payment_return=success",
+        ),
+      ).toBeUndefined();
+      expect(sanitizeSenePayRedirectUrl("")).toBeUndefined();
+    } finally {
+      if (previous === undefined) delete process.env.SENEPAY_MERCHANT_DOMAIN;
+      else process.env.SENEPAY_MERCHANT_DOMAIN = previous;
+    }
   });
 
 

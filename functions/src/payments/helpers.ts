@@ -131,8 +131,8 @@ export function toInternationalPhone(
   const international = `+${normalized}`;
   const patterns: Record<PlatformCountry, RegExp> = {
     SN: /^\+2217\d{8}$/,
-    // Benin: 8-digit local (sandbox 60000001) or new 01 + 8 digits. Reject SN-style 9-digit 78….
-    BJ: /^\+229(?:01\d{8}|\d{8})$/,
+    // Benin: 8-digit not starting with 0 (sandbox 60000001), or new 01 + 8 digits.
+    BJ: /^\+229(?:01\d{8}|[1-9]\d{7})$/,
     // Togo mobiles are 8 digits (sandbox 60000001). Reject SN-style 9-digit numbers.
     TG: /^\+228\d{8}$/,
     // CD: production mobiles start with 8/9; SenePay sandbox uses 12xxxxxxx.
