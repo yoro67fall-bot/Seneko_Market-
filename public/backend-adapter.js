@@ -1020,6 +1020,10 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
   const paymentMethod = selected === "visa" ? "card" : selected;
   const idempotencyKey = crypto.randomUUID();
   const demoMode = purpose === "rent" && isDemoRentPayment();
+  const state = ui.getState();
+  // #region agent log
+  fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'A',location:'backend-adapter.js:startCheckout',message:'checkout start',data:{purpose,paymentMethod,demoMode,isDemoRentPayment:isDemoRentPayment(),rentAmount:state?.rentAmount,platformRentAmount:state?.platformRentAmount,bodyDemo:document.body.classList.contains('demo-mode'),country:services?.country||null,shopId:shop?.backendId||null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const payload = {
     shopId: shop.backendId,
     purpose,
@@ -1051,6 +1055,9 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
     } catch {
       parsed = {};
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'E',location:'backend-adapter.js:createPaymentViaFunction',message:'create-payment response',data:{httpStatus:response.status,ok:response.ok,hasResult:Boolean(parsed?.result),errorStatus:parsed?.error?.status||null,errorMessage:parsed?.error?.message||parsed?.error||null,resultStatus:parsed?.result?.status||parsed?.status||null,resultAmount:parsed?.result?.amount??parsed?.amount??null,debug:parsed?.result?.debug||parsed?.debug||null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!response.ok) {
       const error = new Error(parsed?.error?.message || parsed?.error || "La requête de paiement a échoué.");
       error.code = parsed?.error?.status || `http-${response.status}`;
@@ -1062,12 +1069,18 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
   try {
     result = await createPaymentViaFunction();
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'E',location:'backend-adapter.js:startCheckout:catch',message:'createPayment threw',data:{code:error?.code||null,message:String(error?.message||error),is404:String(error?.code||'').startsWith('http-404')},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!String(error?.code || "").startsWith("http-404")) {
       throw error;
     }
     // Local and legacy fallback: call Railway callable directly.
     result = await backend("createPayment", payload);
   }
+  // #region agent log
+  fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'C',location:'backend-adapter.js:startCheckout:result',message:'payment result branch',data:{status:result?.status||null,amount:result?.amount??null,hasCheckoutUrl:Boolean(result?.checkoutUrl),nextAction:result?.nextAction||null,providerOrderIdPrefix:String(result?.providerOrderId||'').slice(0,20),debug:result?.debug||null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   savePendingPayment({
     paymentId: result.paymentId,
     purpose,
@@ -1108,6 +1121,9 @@ window.processPayment = () => runAction(async () => {
   const rent = Number(state.rentAmount);
   const instantLocal =
     isDemoRentPayment() || (Number.isFinite(rent) && rent > 0 && rent < 1000);
+  // #region agent log
+  fetch('http://127.0.0.1:7440/ingest/8035ae89-c672-4a07-a89e-4798247d01c5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2db4a8'},body:JSON.stringify({sessionId:'2db4a8',runId:'pre-fix',hypothesisId:'D',location:'backend-adapter.js:processPayment',message:'processPayment gate',data:{method,rent,instantLocal,demo:isDemoRentPayment(),phoneLen:(document.getElementById('phoneNumber')?.value||'').trim().length},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!instantLocal && method !== "visa" && method !== "card") {
     const phone = document.getElementById("phoneNumber")?.value.trim() || shop.phone || "";
     if (!phone) throw new Error("Veuillez saisir votre numéro de téléphone.");

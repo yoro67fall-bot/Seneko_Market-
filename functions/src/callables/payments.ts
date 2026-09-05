@@ -267,12 +267,55 @@ export async function createPayment(request: HandlerRequest) {
         },
       });
       const completed = await applyVerifiedPayment(payment.id, "completed");
-      return serializePayment(completed);
+      // #region agent log
+      console.info(
+        "[debug-2db4a8] instant-checkout",
+        JSON.stringify({
+          hypothesisId: "B",
+          paymentId: payment.id,
+          amount,
+          shouldSkipProvider,
+          useInstantCheckout,
+          demoMode: Boolean(input.demoMode),
+          configRent: config.rentAmount,
+          providerMinAmount,
+          countryCode,
+        }),
+      );
+      // #endregion
+      return serializePayment(completed, {
+        debug: {
+          shouldSkipProvider,
+          useInstantCheckout,
+          amount,
+          demoMode: Boolean(input.demoMode),
+          configRent: config.rentAmount,
+          providerMinAmount,
+          path: "instant",
+        },
+      });
     }
 
     if (shouldSkipProvider) {
       return completeInstantPayment();
     }
+
+    // #region agent log
+    console.info(
+      "[debug-2db4a8] provider-checkout",
+      JSON.stringify({
+        hypothesisId: "A",
+        amount,
+        shouldSkipProvider,
+        useInstantCheckout,
+        demoMode: Boolean(input.demoMode),
+        configRent: config.rentAmount,
+        providerMinAmount,
+        countryCode,
+        paymentMethod: input.paymentMethod,
+      }),
+    );
+    // #endregion
 
     const productName =
       input.purpose === "rent"
@@ -339,9 +382,18 @@ export async function createPayment(request: HandlerRequest) {
               : String(direct.nextAction || "").toUpperCase().includes("REDIRECT")
                 ? "redirect"
                 : "ussd_push";
-          return serializePayment(updated, {
+        return serializePayment(updated, {
             nextAction,
             providerStatus: direct.status,
+            debug: {
+              shouldSkipProvider,
+              useInstantCheckout,
+              amount,
+              demoMode: Boolean(input.demoMode),
+              configRent: config.rentAmount,
+              providerMinAmount,
+              path: "direct",
+            },
           });
         }
 
