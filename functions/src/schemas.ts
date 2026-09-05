@@ -187,7 +187,16 @@ export const createPaymentSchema = z
   .object({
     shopId: z.string().trim().min(1).max(128),
     purpose: z.enum(["rent", "sponsor"]),
-    paymentMethod: z.enum(["orange", "wave", "card"]),
+    paymentMethod: z.enum([
+      "orange",
+      "wave",
+      "card",
+      "tmoney",
+      "moov",
+      "mtn",
+      "mpesa",
+      "airtel",
+    ]),
     payerPhone: phone.optional(),
     sponsorOption: sponsorOptionSchema.optional(),
     bannerImages: z.array(assetUrl).max(5).default([]),

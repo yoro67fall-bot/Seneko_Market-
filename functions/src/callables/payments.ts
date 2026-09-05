@@ -45,6 +45,9 @@ import { createTransaction, getTransaction, NabooPayError } from "../payments/na
 import {
   createCheckoutSession,
   getCheckoutSession,
+  getDirectPaymentStatus,
+  initiateDirectPayment,
+  mapUiMethodToSenePayOperator,
   SenePayError,
 } from "../payments/senepay.js";
 import {
@@ -60,7 +63,11 @@ function fromUnknown(error: unknown): ApiError {
         "Too many payment attempts. Please retry shortly.",
       );
     }
-    return new ApiError("unavailable", error.message);
+    const detail =
+      error instanceof SenePayError && error.code
+        ? `${error.message} (${error.code})`
+        : error.message;
+    return new ApiError("unavailable", detail || "Payment provider unavailable.");
   }
   return asApiError(error);
 }
@@ -252,6 +259,61 @@ export async function createPayment(request: HandlerRequest) {
       if (provider === "senepay") {
         const webhookUrl =
           getSenePayWebhookUrl() || `${getPublicApiUrl()}/webhooks/senepay`;
+
+        // Togo: T-Money only via Direct API (USSD push), not hosted Orange/Wave UI.
+        if (countryCode === "TG") {
+          const operator =
+            input.paymentMethod === "tmoney"
+              ? "tmoney"
+              : mapUiMethodToSenePayOperator(input.paymentMethod);
+          if (operator !== "tmoney") {
+            throw new ApiError(
+              "invalid-argument",
+              "Sur la plateforme Togo, seul T-Money est accepté.",
+            );
+          }
+          const customerName = [
+            typeof profile?.firstname === "string" ? profile.firstname : "",
+            typeof profile?.lastname === "string" ? profile.lastname : "",
+          ]
+            .join(" ")
+            .trim();
+          const direct = await initiateDirectPayment({
+            amount,
+            currency: config.currency,
+            country: countryCode,
+            operator: "tmoney",
+            customerPhone: phone,
+            orderId: payment.id,
+            customerName: customerName || "Commercant Seneko",
+            returnUrl: successUrl,
+            cancelUrl: errorUrl,
+            webhookUrl,
+            metadata: {
+              paymentId: payment.id,
+              shopId: input.shopId,
+              purpose: input.purpose,
+            },
+          });
+          const updated = await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              providerOrderId: `direct:${direct.token}`,
+              checkoutUrl: direct.redirectUrl,
+            },
+          });
+          const nextAction =
+            direct.redirectUrl
+              ? "redirect"
+              : String(direct.nextAction || "").toUpperCase().includes("REDIRECT")
+                ? "redirect"
+                : "ussd_push";
+          return serializePayment(updated, {
+            nextAction,
+            providerStatus: direct.status,
+          });
+        }
+
         const checkout = await createCheckoutSession({
           amount,
           currency: config.currency,
@@ -282,7 +344,11 @@ export async function createPayment(request: HandlerRequest) {
         methodOfPayment:
           input.paymentMethod === "card"
             ? ["wave", "orange_money", "bank"]
-            : ["wave", "orange_money"],
+            : input.paymentMethod === "orange"
+              ? ["orange_money"]
+              : input.paymentMethod === "wave"
+                ? ["wave"]
+                : ["wave", "orange_money"],
         productName,
         productDescription,
         amount,
@@ -346,6 +412,28 @@ export async function getPaymentStatus(request: HandlerRequest) {
         return serializePayment(completed);
       }
       if (payment.provider === "senepay") {
+        if (payment.providerOrderId.startsWith("direct:")) {
+          const token = payment.providerOrderId.slice("direct:".length);
+          const remote = await getDirectPaymentStatus(token);
+          const remoteStatus =
+            typeof remote.status === "string"
+              ? remote.status
+              : typeof remote.paymentStatus === "string"
+                ? remote.paymentStatus
+                : "Processing";
+          const status = normalizeSenePayStatus(remoteStatus);
+          const amount = parseXofAmount(remote.amount ?? payment.amount);
+          if (amount !== payment.amount) {
+            throw new ApiError(
+              "failed-precondition",
+              "Payment amount does not match the provider record.",
+            );
+          }
+          const applied = await applyVerifiedPayment(paymentId, status);
+          return serializePayment(applied, {
+            nextAction: status === "pending" ? "ussd_push" : null,
+          });
+        }
         const remote = await getCheckoutSession(payment.providerOrderId);
         const status = normalizeSenePayStatus(remote.status);
         const amount = parseXofAmount(remote.amount ?? payment.amount);

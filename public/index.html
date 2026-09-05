@@ -46,7 +46,7 @@
             --sponsor: #E65100;
             --sponsor-light: rgba(230, 81, 0, 0.12);
             --bg-white: #FFFFFF;
-            --bg-light: #F7F7F7;
+            --bg-light: #FFFFFF;
             --bg-dark: #1A1A1A;
             --text-dark: #1A1A1A;
             --text-gray: #2E2E2E;
@@ -5407,26 +5407,9 @@
                     <div class="payment-header"><i class="fas fa-credit-card"></i>
                         <h3>Payer le loyer</h3>
                     </div>
-                    <div class="payment-amount"><span class="sub">Montant</span><span id="paymentRentAmount">5 000</span> F CFA</div>
+                    <div class="payment-amount"><span class="sub">Montant</span><span id="paymentRentAmount">5 000</span> <span id="paymentCurrencyLabel">F CFA</span></div>
                     <div class="payment-methods" id="paymentMethods">
-                        <div class="payment-method selected" data-method="orange" onclick="selectPaymentMethod('orange')">
-                            <span class="method-check"><i class="fas fa-check-circle"></i></span>
-                            <div class="method-icon orange"><i class="fas fa-phone"></i></div>
-                            <div class="method-name">Orange Money</div>
-                            <div class="method-sub">Mobile</div>
-                        </div>
-                        <div class="payment-method" data-method="wave" onclick="selectPaymentMethod('wave')">
-                            <span class="method-check"><i class="fas fa-check-circle"></i></span>
-                            <div class="method-icon wave"><i class="fas fa-wifi"></i></div>
-                            <div class="method-name">Wave</div>
-                            <div class="method-sub">Transfert</div>
-                        </div>
-                        <div class="payment-method" data-method="visa" onclick="selectPaymentMethod('visa')">
-                            <span class="method-check"><i class="fas fa-check-circle"></i></span>
-                            <div class="method-icon visa"><i class="fab fa-cc-visa"></i></div>
-                            <div class="method-name">Carte VISA</div>
-                            <div class="method-sub">Bancaire</div>
-                        </div>
+                        <!-- Rempli dynamiquement selon le pays (SN / BJ / TG / CD) -->
                     </div>
                     <div class="payment-form" id="paymentForm">
                         <div class="form-group" id="phoneField">
@@ -5463,7 +5446,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button class="btn-pay" onclick="processPayment()"><i class="fas fa-lock"></i> Payer <span id="payButtonAmount">5 000</span> F</button>
+                        <button class="btn-pay" onclick="processPayment()"><i class="fas fa-lock"></i> Payer <span id="payButtonAmount">5 000</span> <span id="payButtonCurrency">F</span></button>
                         <div class="payment-security"><i class="fas fa-shield-alt"></i> Paiement sécurisé</div>
                     </div>
                 </div>
@@ -9916,18 +9899,19 @@ SCRIPT COMPLET
         function selectPaymentMethod(method) {
             selectedPaymentMethod = method;
             document.querySelectorAll('.payment-method').forEach(el => el.classList.remove('selected'));
-            document.querySelector(`.payment-method[data-method="${method}"]`).classList.add('selected');
+            const target = document.querySelector(`.payment-method[data-method="${method}"]`);
+            if (target) target.classList.add('selected');
             const phoneField = document.getElementById('phoneField');
             const operatorField = document.getElementById('operatorField');
             const cardFields = document.getElementById('cardFields');
-            if (method === 'visa') {
-                phoneField.style.display = 'none';
-                operatorField.style.display = 'none';
-                cardFields.style.display = 'block';
+            if (method === 'visa' || method === 'card') {
+                if (phoneField) phoneField.style.display = 'none';
+                if (operatorField) operatorField.style.display = 'none';
+                if (cardFields) cardFields.style.display = 'block';
             } else {
-                phoneField.style.display = 'block';
-                operatorField.style.display = 'block';
-                cardFields.style.display = 'none';
+                if (phoneField) phoneField.style.display = 'block';
+                if (operatorField) operatorField.style.display = 'none';
+                if (cardFields) cardFields.style.display = 'none';
             }
         }
 

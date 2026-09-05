@@ -102,11 +102,24 @@ export function toInternationalPhone(
   if (!digits) throw new Error("A payer phone number is required.");
   let normalized = digits;
   if (normalized.startsWith(dial) && normalized.length >= dial.length + 8) {
-    normalized = normalized.slice(0, Math.min(normalized.length, dial.length + 10));
+    normalized = normalized.slice(
+      0,
+      Math.min(normalized.length, dial.length + 10),
+    );
+  } else if (normalized.length === 8) {
+    // BJ / TG local mobiles are often 8 digits (e.g. sandbox 60000001).
+    normalized = `${dial}${normalized}`;
   } else if (normalized.length === 9) {
     normalized = `${dial}${normalized}`;
   } else if (normalized.length === 10 && normalized.startsWith("0")) {
     normalized = `${dial}${normalized.slice(1)}`;
+  } else if (
+    countryCode === "CD" &&
+    normalized.length === 10 &&
+    !normalized.startsWith("0")
+  ) {
+    // Some CD numbers are entered as 10 digits without a leading 0.
+    normalized = `${dial}${normalized}`;
   }
   const international = `+${normalized}`;
   const patterns: Record<PlatformCountry, RegExp> = {
@@ -126,14 +139,22 @@ export function normalizeSenePayStatus(value: unknown): PaymentStatus {
   switch (value.trim()) {
     case "Open":
     case "Processing":
+    case "Pending":
+    case "pending":
       return "pending";
     case "Complete":
+    case "Completed":
+    case "Success":
+    case "completed":
       return "completed";
     case "Failed":
     case "Expired":
+    case "failed":
       return "failed";
     case "Cancelled":
     case "Canceled":
+    case "cancelled":
+    case "canceled":
       return "canceled";
     default:
       throw new Error("Unknown payment status.");

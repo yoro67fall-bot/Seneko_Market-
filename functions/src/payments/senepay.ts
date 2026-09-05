@@ -10,6 +10,7 @@ export class SenePayError extends Error {
   constructor(
     message: string,
     readonly status: number | null = null,
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = "SenePayError";
@@ -33,6 +34,29 @@ export interface CheckoutSessionResult {
   checkoutUrl: string;
   amount: number;
   status: string;
+  raw: JsonRecord;
+}
+
+export interface InitiateDirectPaymentInput {
+  amount: number;
+  currency: string;
+  country: string;
+  operator: string;
+  customerPhone: string;
+  orderId: string;
+  customerName?: string;
+  returnUrl?: string;
+  cancelUrl?: string;
+  webhookUrl?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface DirectPaymentResult {
+  token: string;
+  status: string;
+  nextAction: string | null;
+  redirectUrl: string | null;
+  amount: number;
   raw: JsonRecord;
 }
 
@@ -78,7 +102,8 @@ async function providerFetch(
         : typeof json.error === "string"
           ? json.error
           : `SenePay returned HTTP ${response.status}.`;
-    throw new SenePayError(message, response.status);
+    const code = typeof json.code === "string" ? json.code : null;
+    throw new SenePayError(message, response.status, code);
   }
   return json;
 }
@@ -125,4 +150,86 @@ export async function getCheckoutSession(
     `/api/v1/checkout/sessions/${encodeURIComponent(sessionToken)}`,
     { method: "GET" },
   );
+}
+
+export async function initiateDirectPayment(
+  input: InitiateDirectPaymentInput,
+): Promise<DirectPaymentResult> {
+  const phone = input.customerPhone.replace(/^\+/, "");
+  const result = await providerFetch("/api/v1/payments/initiate", {
+    method: "POST",
+    body: JSON.stringify({
+      amount: input.amount,
+      currency: input.currency,
+      country_code: input.country,
+      operator: input.operator,
+      customer_phone: phone,
+      order_id: input.orderId,
+      ...(input.customerName ? { customer_name: input.customerName } : {}),
+      ...(input.returnUrl ? { return_url: input.returnUrl } : {}),
+      ...(input.cancelUrl ? { cancel_url: input.cancelUrl } : {}),
+      ...(input.webhookUrl ? { webhook_url: input.webhookUrl } : {}),
+      ...(input.metadata ? { metadata: input.metadata } : {}),
+    }),
+  });
+
+  const token =
+    typeof result.token === "string"
+      ? result.token
+      : typeof result.paymentToken === "string"
+        ? result.paymentToken
+        : "";
+  if (!token) {
+    throw new SenePayError("SenePay did not return a payment token.");
+  }
+
+  const nextAction =
+    typeof result.nextAction === "string"
+      ? result.nextAction
+      : typeof result.next_action === "string"
+        ? result.next_action
+        : null;
+  const redirectUrl =
+    typeof result.redirectUrl === "string"
+      ? result.redirectUrl
+      : typeof result.redirect_url === "string"
+        ? result.redirect_url
+        : null;
+
+  return {
+    token,
+    status: typeof result.status === "string" ? result.status : "Processing",
+    nextAction,
+    redirectUrl,
+    amount: typeof result.amount === "number" ? result.amount : input.amount,
+    raw: result,
+  };
+}
+
+export async function getDirectPaymentStatus(token: string): Promise<JsonRecord> {
+  return providerFetch(
+    `/api/v1/payments/${encodeURIComponent(token)}/status`,
+    { method: "GET" },
+  );
+}
+
+export function mapUiMethodToSenePayOperator(method: string): string {
+  switch (method) {
+    case "tmoney":
+      return "tmoney";
+    case "moov":
+      return "moov";
+    case "mtn":
+      return "mtn";
+    case "mpesa":
+      return "mpesa";
+    case "airtel":
+      return "airtel";
+    case "orange":
+      return "orange";
+    case "wave":
+      return "wave";
+    default:
+      return method;
+  }
 }

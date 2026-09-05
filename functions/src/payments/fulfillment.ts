@@ -45,7 +45,10 @@ export function asPayment(payment: Payment): PaymentRecord {
   };
 }
 
-export function serializePayment(payment: Payment): Record<string, unknown> {
+export function serializePayment(
+  payment: Payment,
+  extras: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     paymentId: payment.id,
     status: payment.status,
@@ -55,6 +58,7 @@ export function serializePayment(payment: Payment): Record<string, unknown> {
     checkoutUrl: payment.checkoutUrl,
     providerOrderId: payment.providerOrderId,
     sponsorOption: payment.sponsorOption,
+    ...extras,
   };
 }
 

@@ -227,6 +227,72 @@ function applyCountryFlag({ flagUrl, countryName, country }) {
   }
 }
 
+function paymentMethodsForCountry(country) {
+  const code = String(country || "SN").toUpperCase();
+  if (code === "TG") {
+    return [
+      { id: "tmoney", name: "T-Money", sub: "Mobile", icon: "fa-mobile-alt", tone: "orange" }
+    ];
+  }
+  if (code === "BJ") {
+    return [
+      { id: "moov", name: "Moov Money", sub: "Mobile", icon: "fa-mobile-alt", tone: "wave" },
+      { id: "mtn", name: "MTN Mobile Money", sub: "Mobile", icon: "fa-phone", tone: "orange" }
+    ];
+  }
+  if (code === "CD") {
+    return [
+      { id: "mpesa", name: "M-Pesa", sub: "Mobile", icon: "fa-mobile-alt", tone: "wave" },
+      { id: "airtel", name: "Airtel Money", sub: "Mobile", icon: "fa-phone", tone: "orange" },
+      { id: "orange", name: "Orange Money", sub: "Mobile", icon: "fa-phone", tone: "orange" }
+    ];
+  }
+  return [
+    { id: "orange", name: "Orange Money", sub: "Mobile", icon: "fa-phone", tone: "orange" },
+    { id: "wave", name: "Wave", sub: "Transfert", icon: "fa-wifi", tone: "wave" },
+    { id: "visa", name: "Carte VISA", sub: "Bancaire", icon: "fa-cc-visa", tone: "visa", brand: true }
+  ];
+}
+
+function currencyLabelForCountry(country) {
+  return String(country || "SN").toUpperCase() === "CD" ? "CDF" : "F CFA";
+}
+
+function applyCountryPaymentUi(platform) {
+  const country = platform?.country || services?.country || "SN";
+  const methods = paymentMethodsForCountry(country);
+  const list = document.getElementById("paymentMethods");
+  if (list) {
+    list.innerHTML = methods.map((method, index) => `
+      <div class="payment-method${index === 0 ? " selected" : ""}" data-method="${method.id}" onclick="selectPaymentMethod('${method.id}')">
+        <span class="method-check"><i class="fas fa-check-circle"></i></span>
+        <div class="method-icon ${method.tone}"><i class="${method.brand ? "fab" : "fas"} ${method.icon}"></i></div>
+        <div class="method-name">${method.name}</div>
+        <div class="method-sub">${method.sub}</div>
+      </div>
+    `).join("");
+  }
+  const currency = currencyLabelForCountry(country);
+  const currencyLabel = document.getElementById("paymentCurrencyLabel");
+  if (currencyLabel) currencyLabel.textContent = currency;
+  const payCurrency = document.getElementById("payButtonCurrency");
+  if (payCurrency) payCurrency.textContent = currency === "CDF" ? "CDF" : "F";
+  const phoneInput = document.getElementById("phoneNumber");
+  if (phoneInput) {
+    const placeholders = {
+      SN: "77 123 45 67",
+      BJ: "01 23 45 67",
+      TG: "90 12 34 56",
+      CD: "081 234 5678"
+    };
+    phoneInput.placeholder = placeholders[String(country).toUpperCase()] || placeholders.SN;
+  }
+  const first = methods[0]?.id || "orange";
+  if (typeof window.selectPaymentMethod === "function") {
+    window.selectPaymentMethod(first);
+  }
+}
+
 function hideSocialLogin() {
   document.querySelectorAll(".auth-social, .auth-divider").forEach(node => {
     node.style.display = "none";
@@ -247,6 +313,7 @@ async function initializeBackend() {
     applyTheme();
     applyCountryFlag(platform);
     applyPlatformSwitcher(platform);
+    applyCountryPaymentUi(platform);
     hideSocialLogin();
     if (!platform.apiUrl) {
       toast(
@@ -900,6 +967,33 @@ function isDemoRentPayment() {
   return document.body.classList.contains("demo-mode");
 }
 
+async function pollPaymentUntilDone(paymentId, purpose) {
+  const maxAttempts = 40;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 2500 : 3000));
+    const status = await backend("getPaymentStatus", { paymentId });
+    if (status.status === "completed") {
+      clearPendingPayment();
+      await refreshCurrentData();
+      toast(
+        "success",
+        "✅ Paiement confirmé",
+        purpose === "sponsor" ? "Votre sponsoring est maintenant actif." : "Votre loyer est maintenant à jour."
+      );
+      return;
+    }
+    if (["cancelled", "canceled", "failed"].includes(status.status)) {
+      clearPendingPayment();
+      throw new Error("Le paiement a été annulé ou refusé.");
+    }
+  }
+  toast(
+    "info",
+    "Paiement en attente",
+    "Confirmez le paiement sur votre téléphone. Le statut sera mis à jour automatiquement."
+  );
+}
+
 async function startCheckout({ purpose, sponsorOption, bannerImages }) {
   const shop = currentShop();
   if (!shop) throw new Error("Boutique introuvable.");
@@ -970,8 +1064,20 @@ async function startCheckout({ purpose, sponsorOption, bannerImages }) {
     );
     return;
   }
-  if (!result.checkoutUrl) throw new Error("Le prestataire de paiement n'a pas renvoyé de lien de paiement.");
-  location.assign(result.checkoutUrl);
+  if (result.checkoutUrl) {
+    location.assign(result.checkoutUrl);
+    return;
+  }
+  if (result.nextAction === "ussd_push" || String(result.providerOrderId || "").startsWith("direct:")) {
+    toast(
+      "info",
+      "Confirmez sur votre téléphone",
+      "Validez le paiement T-Money (USSD) sur votre mobile. Nous vérifions le statut…"
+    );
+    await pollPaymentUntilDone(result.paymentId, purpose);
+    return;
+  }
+  throw new Error("Le prestataire de paiement n'a pas renvoyé de lien de paiement.");
 }
 
 window.processPayment = () => runAction(async () => {
@@ -979,7 +1085,7 @@ window.processPayment = () => runAction(async () => {
   const shop = currentShop();
   if (!shop) throw new Error("Boutique introuvable.");
   const method = ui.getState().selectedPaymentMethod;
-  if (method !== "visa") {
+  if (method !== "visa" && method !== "card") {
     const phone = document.getElementById("phoneNumber")?.value.trim() || shop.phone || "";
     if (!phone) throw new Error("Veuillez saisir votre numéro de téléphone.");
   }
