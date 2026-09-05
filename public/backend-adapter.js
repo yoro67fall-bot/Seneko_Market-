@@ -851,9 +851,7 @@ function isDemoRentPayment() {
   const state = ui.getState();
   if (state?.isDemoMode === true) return true;
   if (typeof ui.isDemoMode === "function" && ui.isDemoMode() === true) return true;
-  if (document.body.classList.contains("demo-mode")) return true;
-  const rent = Number(state?.rentAmount);
-  return Number.isFinite(rent) && rent > 0 && rent < 1000;
+  return document.body.classList.contains("demo-mode");
 }
 
 async function startCheckout({ purpose, sponsorOption, bannerImages }) {
