@@ -2,5 +2,11 @@
   "apiUrl": "https://YOUR-RAILWAY-SERVICE.up.railway.app",
   "country": "TG",
   "countryName": "Togo",
-  "flagUrl": "/flags/tg.svg"
+  "flagUrl": "/flags/tg.svg",
+  "platforms": {
+    "SN": "https://seneko-market-sengal.netlify.app",
+    "BJ": "https://seneko-market-benin.netlify.app",
+    "TG": "https://seneko-market-togo.netlify.app",
+    "CD": "https://seneko-market-rdc.netlify.app"
+  }
 }

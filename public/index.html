@@ -675,7 +675,7 @@
             transform: translateX(-50%);
             width: 300px;
             height: 300px;
-            background: radial-gradient(circle, rgba(27, 94, 32, 0.05), transparent 70%);
+            background: radial-gradient(circle, rgba(0, 0, 0, 0.03), transparent 70%);
             border-radius: 50%;
             z-index: -1;
         }
@@ -4768,6 +4768,63 @@
         /* ================================================================
            CONTACT INFO
            ================================================================ */
+        .platform-switcher {
+            background: var(--bg-white);
+            border-bottom: 1px solid var(--border-light);
+            padding: 0.45rem 0;
+        }
+
+        .platform-switcher .container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+            flex-wrap: wrap;
+        }
+
+        .platform-switcher-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-light);
+            white-space: nowrap;
+        }
+
+        .platform-switcher-links {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .platform-switcher-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.25rem 0.65rem;
+            border-radius: var(--radius-full);
+            border: 1px solid var(--border-color);
+            background: var(--bg-light);
+            color: var(--text-dark);
+            text-decoration: none;
+            font-size: 0.72rem;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .platform-switcher-link:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: #fff;
+        }
+
+        .platform-switcher-link img {
+            width: 16px;
+            height: 12px;
+            object-fit: cover;
+            border-radius: 2px;
+        }
+
         .contact-info-bar {
             background: var(--bg-dark);
             color: rgba(255, 255, 255, 0.7);
@@ -5176,6 +5233,14 @@
             </div>
         </div>
     </header>
+
+    <!-- Liens vers les autres plateformes pays -->
+    <div class="platform-switcher" id="platformSwitcher" aria-label="Autres pays Seneko Market">
+        <div class="container">
+            <span class="platform-switcher-label">Autres pays :</span>
+            <div class="platform-switcher-links" id="platformSwitcherLinks"></div>
+        </div>
+    </div>
 
     <!-- Barre d'informations de contact -->
     <div class="contact-info-bar" id="contactInfoBar">
